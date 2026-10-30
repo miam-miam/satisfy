@@ -18,7 +18,7 @@
 //! Strategies 2 and 3 apply only past the end of the list, after a [`There`] for every
 //! provided value. In a [scope](Container::scope), the scope's own list ends with an
 //! [`InParent`] step into the parent's list, and singletons come from the parent.
-//! 
+//!
 //! These markers are inferred and should never be written by hand. They appear in error messages
 //! as the path a resolve took: `There<AutoBuild<()>>` means "skip the one provided value, then
 //! build it".

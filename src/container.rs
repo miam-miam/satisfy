@@ -1,5 +1,5 @@
 //! The [`Container`] and its child [`Scoped`] containers.
-// ^ Technically the scoped container is in a separate module, 
+// ^ Technically the scoped container is in a separate module,
 // but we re-export it from here in the docs.
 
 use std::any::Any;
@@ -7,18 +7,18 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use crate::once_map::{sorted_by_name, OnceMap, TypeKey};
-use crate::strategy::{IntoValue, Locate};
-use crate::{FromContainer, Resolve, ResolveAll, Shared};
+use crate::once_map::{OnceMap, TypeKey, sorted_by_name};
 use crate::scope::Scoped;
+use crate::strategy::{IntoValue, Locate};
 use crate::typed_list::{Cons, Nil, ScopeEnd};
+use crate::{FromContainer, Resolve, ResolveAll, Shared};
 
 /// A dependency injection container whose dependency graph is checked at compile time.
 ///
 /// Give the container only the values that have no sensible default, such as configuration
 /// or external handles, with [`provide`](Self::provide). Every other type should implement
 /// [`FromContainer`], allowing it to be  built on demand with everything it depends on.
-/// 
+///
 /// A container is usually built once at start-up.
 ///
 /// # Getting started
@@ -305,7 +305,9 @@ impl<TList> Container<TList> {
     {
         if let Some(f) = self.overrides.get(&TypeKey::of::<T>()) {
             // Keyed by TypeId::of::<T>() in override_with, so this can't fail.
-            let f = f.downcast_ref::<Box<dyn Fn() -> T + Send + Sync>>().unwrap();
+            let f = f
+                .downcast_ref::<Box<dyn Fn() -> T + Send + Sync>>()
+                .unwrap();
             return f();
         }
         T::from_container(self)
@@ -315,9 +317,9 @@ impl<TList> Container<TList> {
     where
         T: ?Sized + Shared<I, &'c Self> + 'c,
     {
-        let entry = self
-            .singletons
-            .get_or_init(TypeKey::of::<T::Stored>(), || Box::new(T::build_shared(self)));
+        let entry = self.singletons.get_or_init(TypeKey::of::<T::Stored>(), || {
+            Box::new(T::build_shared(self))
+        });
         T::from_stored((**entry).downcast_ref().unwrap())
     }
 }
@@ -327,8 +329,14 @@ impl<TList: fmt::Debug> fmt::Debug for Container<TList> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Container")
             .field("provided", &self.provided)
-            .field("overrides", &sorted_by_name(self.overrides.keys().copied().collect()))
-            .field("singletons", &sorted_by_name(self.singletons.initialised_keys()))
+            .field(
+                "overrides",
+                &sorted_by_name(self.overrides.keys().copied().collect()),
+            )
+            .field(
+                "singletons",
+                &sorted_by_name(self.singletons.initialised_keys()),
+            )
             .finish()
     }
 }

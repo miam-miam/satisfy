@@ -1,4 +1,6 @@
 // ===================== app crate =====================
+#![expect(dead_code, clippy::disallowed_names)]
+
 use di::{Container, FromContainer, Resolve, ResolveAll};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};

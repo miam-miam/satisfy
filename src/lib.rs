@@ -69,7 +69,7 @@ pub trait Shared<I, C> {
     type Stored: ?Sized + Send + Sync + 'static;
 
     fn build_shared(c: C) -> Arc<Self::Stored>;
-    
+
     // Shorten the lifetime to match the container.
     fn from_stored(stored: &Arc<Self::Stored>) -> &Arc<Self>;
 }
@@ -93,7 +93,7 @@ where
 }
 
 /// Main trait for resolving a type from a container.
-/// 
+///
 /// `I` is the resolution path, inferred and never written by hand (see [`strategy`] for more details).
 #[diagnostic::on_unimplemented(
     message = "this container can't resolve `{T}`",
@@ -106,7 +106,7 @@ pub trait Resolve<I, T> {
 
 /// Resolves a tuple of 2 to 12 dependencies, using [`Resolve`] for each element.
 ///
-/// Written as its own trait rather than a 
+/// Written as its own trait rather than a
 /// [`Resolve`] impl so the elements may borrow from the container. For one dependency, use [`Resolve`].
 /// `I` is a tuple of the elements' resolution paths, inferred (see [`strategy`] for more details).
 pub trait ResolveAll<I, T: sealed::Tuple> {
