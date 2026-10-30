@@ -3,11 +3,10 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use crate::typed_list::{Cons, Nil, ScopeEnd};
-use crate::once_map::{sorted_by_name, TypeKey};
+use crate::once_map::{TypeKey, sorted_by_name};
 use crate::strategy::{AutoBuild, InParent, IntoValue, Locate, SharedArc, SharedRef};
+use crate::typed_list::{Cons, Nil, ScopeEnd};
 use crate::{Container, FromContainer, Resolve, ResolveAll, Shared};
-
 
 /// A child of a [`Container`], made with [`Container::scope`], allowing request based overrides.
 ///
@@ -66,12 +65,12 @@ impl<'p, Parent> Scoped<'p, Parent, ScopeEnd> {
 }
 
 impl<'p, Parent, TList> Scoped<'p, Parent, TList> {
-    /// Adds `T` to the scope's type. 
-    /// 
+    /// Adds `T` to the scope's type.
+    ///
     /// `T` must not also be provided by the parent or have a
     /// [`FromContainer`] impl as shadowing Parent's values is not supported.
     ///
-    /// Use [`override_with`](Self::override_with) to override a 
+    /// Use [`override_with`](Self::override_with) to override a
     /// type that has a [`FromContainer`] impl.
     pub fn provide<T>(self, value: T) -> Scoped<'p, Parent, Cons<T, TList>> {
         Scoped {
@@ -87,7 +86,7 @@ impl<'p, Parent, TList> Scoped<'p, Parent, TList> {
 
     /// Override a type that has a [`FromContainer`] impl, for values this scope builds.
     ///
-    /// Takes precedence over the parent's override. Singletons are unaffected, 
+    /// Takes precedence over the parent's override. Singletons are unaffected,
     /// use [`override_singleton`](Self::override_singleton) to override them.
     pub fn override_with<T, I>(mut self, value: T) -> Self
     where
@@ -99,20 +98,21 @@ impl<'p, Parent, TList> Scoped<'p, Parent, TList> {
         self
     }
 
-    /// Sets the instance behind `Arc<T>` and `&T` in this scope only. 
-    /// 
-    /// The parent and other scopes keep the parent's singleton. 
+    /// Sets the instance behind `Arc<T>` and `&T` in this scope only.
+    ///
+    /// The parent and other scopes keep the parent's singleton.
     /// Singletons the parent builds keep using the parent's instance for their own dependencies.
     pub fn override_singleton<T, I>(mut self, value: Arc<T>) -> Self
     where
         T: ?Sized + Shared<I, &'p Container<Parent>, Stored = T> + Send + Sync + 'static,
     {
-        self.singleton_overrides.insert(TypeKey::of::<T>(), Arc::new(value));
+        self.singleton_overrides
+            .insert(TypeKey::of::<T>(), Arc::new(value));
         self
     }
 
     /// Resolves a single dependency, which may borrow from the scope or the parent.
-    /// 
+    ///
     /// See [`Resolve`] for details.
     pub fn resolve<'c, T, I>(&'c self) -> T
     where
@@ -121,8 +121,8 @@ impl<'p, Parent, TList> Scoped<'p, Parent, TList> {
         <&'c Self as Resolve<I, T>>::resolve(&self)
     }
 
-    /// Resolves a tuple of dependencies. 
-    /// 
+    /// Resolves a tuple of dependencies.
+    ///
     /// See [`ResolveAll`] for details.
     pub fn resolve_all<'c, T, I>(&'c self) -> T
     where
@@ -137,10 +137,15 @@ impl<'p, Parent, TList> Scoped<'p, Parent, TList> {
         T: FromContainer<I, &'c Self>,
     {
         let key = TypeKey::of::<T>();
-        let found = self.overrides.get(&key).or_else(|| self.parent.override_for(key));
+        let found = self
+            .overrides
+            .get(&key)
+            .or_else(|| self.parent.override_for(key));
         if let Some(f) = found {
             // Keyed by TypeId::of::<T>() in override_with, so this can't fail.
-            let f = f.downcast_ref::<Box<dyn Fn() -> T + Send + Sync>>().unwrap();
+            let f = f
+                .downcast_ref::<Box<dyn Fn() -> T + Send + Sync>>()
+                .unwrap();
             return f();
         }
         T::from_container(self)
@@ -164,7 +169,10 @@ impl<Parent: fmt::Debug, TList: fmt::Debug> fmt::Debug for Scoped<'_, Parent, TL
         f.debug_struct("Scoped")
             .field("parent", self.parent)
             .field("provided", &self.provided)
-            .field("overrides", &sorted_by_name(self.overrides.keys().copied().collect()))
+            .field(
+                "overrides",
+                &sorted_by_name(self.overrides.keys().copied().collect()),
+            )
             .field(
                 "singleton_overrides",
                 &sorted_by_name(self.singleton_overrides.keys().copied().collect()),
@@ -198,8 +206,7 @@ where
 }
 
 // End of the parent's list, reached from a scope: build in the scope, share from the parent.
-impl<'c, 'p, T, I, Parent, TList> Locate<'c, T, AutoBuild<I>, &'c Scoped<'p, Parent, TList>>
-    for Nil
+impl<'c, 'p, T, I, Parent, TList> Locate<'c, T, AutoBuild<I>, &'c Scoped<'p, Parent, TList>> for Nil
 where
     T: FromContainer<I, &'c Scoped<'p, Parent, TList>>,
 {
@@ -210,8 +217,8 @@ where
     }
 }
 
-impl<'c, 'p, T, I, Parent, TList>
-    Locate<'c, Arc<T>, SharedArc<I>, &'c Scoped<'p, Parent, TList>> for Nil
+impl<'c, 'p, T, I, Parent, TList> Locate<'c, Arc<T>, SharedArc<I>, &'c Scoped<'p, Parent, TList>>
+    for Nil
 where
     T: ?Sized + Shared<I, &'p Container<Parent>> + 'p,
 {
@@ -222,8 +229,8 @@ where
     }
 }
 
-impl<'c, 'p, T, I, Parent, TList>
-    Locate<'c, &'c T, SharedRef<I>, &'c Scoped<'p, Parent, TList>> for Nil
+impl<'c, 'p, T, I, Parent, TList> Locate<'c, &'c T, SharedRef<I>, &'c Scoped<'p, Parent, TList>>
+    for Nil
 where
     T: ?Sized + Shared<I, &'p Container<Parent>> + 'p,
 {

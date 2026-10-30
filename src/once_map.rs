@@ -49,7 +49,10 @@ impl<K: Eq + Hash + Copy, V> OnceMap<K, V> {
     /// Keys whose value has finished initialising; ones still being created are left out.
     pub(crate) fn initialised_keys(&self) -> Vec<K> {
         let map = self.map.lock().unwrap();
-        map.iter().filter(|(_, cell)| cell.get().is_some()).map(|(k, _)| *k).collect()
+        map.iter()
+            .filter(|(_, cell)| cell.get().is_some())
+            .map(|(k, _)| *k)
+            .collect()
     }
 }
 
