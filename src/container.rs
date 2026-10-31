@@ -65,8 +65,7 @@ use crate::{FromContainer, Resolve, ResolveAll, Shared};
 ///
 /// ```
 /// # use satisfy::{Container, FromContainer, Resolve};
-/// use std::sync::Arc;
-///
+/// # use std::sync::Arc;
 /// // Not `Clone`, so it can only be borrowed.
 /// struct DbConfig {
 ///     url: String,

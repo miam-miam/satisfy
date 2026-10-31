@@ -19,8 +19,7 @@ use crate::{Container, FromContainer, Resolve, ResolveAll, Shared};
 ///
 /// ```
 /// # use satisfy::{Container, FromContainer};
-/// use std::sync::Arc;
-///
+/// # use std::sync::Arc;
 /// struct Pool {
 ///     url: String,
 /// }
