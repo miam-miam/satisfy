@@ -1,5 +1,5 @@
 // `Port` has no default and neither the scope nor its parent provides it.
-use di::Container;
+use satisfy::Container;
 use std::sync::Arc;
 
 struct Port(#[allow(dead_code)] u16);

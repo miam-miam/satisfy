@@ -1,5 +1,5 @@
 // A scope borrows its parent container, so it can't outlive it.
-use di::Container;
+use satisfy::Container;
 
 fn main() {
     let scope;

@@ -1,5 +1,5 @@
 // `override_with` can't take an `Arc<dyn Db>`, even with a `dyn_default!`; `override_singleton` can.
-use di::{Container, FromContainer};
+use satisfy::{Container, FromContainer};
 use std::sync::Arc;
 
 trait Db: Send + Sync {}
@@ -12,7 +12,7 @@ impl<C> FromContainer<(), C> for Postgres {
     }
 }
 
-di::dyn_default!(dyn Db => Postgres);
+satisfy::dyn_default!(dyn Db => Postgres);
 
 fn main() {
     let mock: Arc<dyn Db> = Arc::new(Postgres);

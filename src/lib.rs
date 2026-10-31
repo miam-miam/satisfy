@@ -43,7 +43,7 @@ pub trait FromContainer<I, C>: Sized + 'static {
 #[diagnostic::on_unimplemented(
     message = "`{Self}` has no shared instance",
     label = "no shared instance for `{Self}`",
-    note = "give `{Self}` a `FromContainer` impl; for a `dyn Trait`, use `di::dyn_default!(dyn Trait => Impl)`"
+    note = "give `{Self}` a `FromContainer` impl; for a `dyn Trait`, use `satisfy::dyn_default!(dyn Trait => Impl)`"
 )]
 pub trait Shared<I, C> {
     /// `Self` with its lifetimes widened to `'static`, which the singleton is stored and keyed as.
@@ -140,7 +140,7 @@ tuple_resolve_all!(T1 I1, T2 I2, T3 I3, T4 I4, T5 I5, T6 I6, T7 I7, T8 I8, T9 I9
 /// Makes `Arc<dyn Trait>` and `&dyn Trait` resolve to the provided `Impl` singleton that implements [`FromContainer`].
 ///
 /// ```
-/// use di::{Container, FromContainer};
+/// use satisfy::{Container, FromContainer};
 /// use std::sync::Arc;
 ///
 /// trait Db: Send + Sync {}
@@ -154,7 +154,7 @@ tuple_resolve_all!(T1 I1, T2 I2, T3 I3, T4 I4, T5 I5, T6 I6, T7 I7, T8 I8, T9 I9
 ///     }
 /// }
 ///
-/// di::dyn_default!(dyn Db => Postgres);
+/// satisfy::dyn_default!(dyn Db => Postgres);
 ///
 /// let c = Container::new();
 /// let db: Arc<dyn Db> = c.resolve();
@@ -170,7 +170,7 @@ tuple_resolve_all!(T1 I1, T2 I2, T3 I3, T4 I4, T5 I5, T6 I6, T7 I7, T8 I8, T9 I9
 /// `Arc<dyn Trait>` becomes ambiguous.
 ///
 /// ```
-/// # use di::{Container, FromContainer};
+/// # use satisfy::{Container, FromContainer};
 /// # use std::sync::Arc;
 /// # trait Db: Send + Sync {}
 /// # struct Postgres;
@@ -180,7 +180,7 @@ tuple_resolve_all!(T1 I1, T2 I2, T3 I3, T4 I4, T5 I5, T6 I6, T7 I7, T8 I8, T9 I9
 /// #         Postgres
 /// #     }
 /// # }
-/// di::dyn_default!(dyn Db => Postgres);
+/// satisfy::dyn_default!(dyn Db => Postgres);
 ///
 /// struct Mock;
 /// impl Db for Mock {}

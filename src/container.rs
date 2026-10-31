@@ -24,7 +24,7 @@ use crate::{FromContainer, Resolve, ResolveAll, Shared};
 /// # Getting started
 ///
 /// ```
-/// use di::{Container, FromContainer, Resolve};
+/// use satisfy::{Container, FromContainer, Resolve};
 ///
 /// // No sensible default, so it should be provided.
 /// #[derive(Clone)]
@@ -61,7 +61,7 @@ use crate::{FromContainer, Resolve, ResolveAll, Shared};
 /// - `Arc<T>`: the singleton instance, built once per container, such as a connection pool.
 ///
 /// ```
-/// # use di::{Container, FromContainer, Resolve};
+/// # use satisfy::{Container, FromContainer, Resolve};
 /// use std::sync::Arc;
 ///
 /// // Not `Clone`, so it can only be borrowed.
@@ -104,7 +104,7 @@ use crate::{FromContainer, Resolve, ResolveAll, Shared};
 /// The rest of the dependency graph is unchanged and other containers are unaffected.
 ///
 /// ```
-/// # use di::{Container, FromContainer, Resolve};
+/// # use satisfy::{Container, FromContainer, Resolve};
 /// #[derive(Clone)]
 /// struct Mailer {
 ///     host: String,
@@ -139,7 +139,7 @@ use crate::{FromContainer, Resolve, ResolveAll, Shared};
 /// panic:
 ///
 /// ```compile_fail,E0277
-/// # use di::Container;
+/// # use satisfy::Container;
 /// struct Config;
 ///
 /// // Never provided, and no `FromContainer` impl.
@@ -251,7 +251,7 @@ impl<TList> Container<TList> {
     /// [`Scoped::override_singleton`] which overrides the singleton used for that scope only.
     ///
     /// ```
-    /// # use di::{Container, FromContainer, Resolve, ResolveAll};
+    /// # use satisfy::{Container, FromContainer, Resolve, ResolveAll};
     /// # use std::sync::Arc;
     /// struct Pool;
     ///

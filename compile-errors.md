@@ -25,7 +25,7 @@ This appears for shared instances (singletons). Check the following in order:
 1. `X` has a `FromContainer` impl, or was provided.
 2. `X` is `Send + Sync`. Singletons are shared across threads, so a type holding an `Rc` or `Cell`
    can't be one.
-3. For `Arc<dyn Trait>`, the trait has a `di::dyn_default!(dyn Trait => Impl)`.
+3. For `Arc<dyn Trait>`, the trait has a `satisfy::dyn_default!(dyn Trait => Impl)`.
 4. No `FromContainer` impl pins the path (see below).
 
 ## `can't resolve Port` when `Port` is provided

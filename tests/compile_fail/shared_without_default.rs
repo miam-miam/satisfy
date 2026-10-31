@@ -1,5 +1,5 @@
 // A singleton is built from a default, and `Pool` has none.
-use di::Container;
+use satisfy::Container;
 use std::sync::Arc;
 
 struct Pool;

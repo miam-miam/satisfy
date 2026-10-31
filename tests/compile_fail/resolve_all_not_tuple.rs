@@ -1,5 +1,5 @@
 // `resolve_all` takes a tuple of 2 to 12 dependencies.
-use di::Container;
+use satisfy::Container;
 
 fn main() {
     let c = Container::new().provide(1u32);

@@ -1,5 +1,5 @@
 // A provided value that isn't `Clone` can only be borrowed, not resolved by value.
-use di::Container;
+use satisfy::Container;
 
 struct Config;
 

@@ -1,5 +1,5 @@
 // A resolved `&T` borrows the container, so it can't outlive it.
-use di::Container;
+use satisfy::Container;
 
 struct Config;
 

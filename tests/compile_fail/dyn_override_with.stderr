@@ -6,7 +6,7 @@ error[E0277]: `Arc<dyn Db>` has no default (`FromContainer` impl)
    |                              |
    |                              required by a bound introduced by this call
    |
-   = help: the trait `for<'c> FromContainer<_, &'c Container<di::typed_list::Nil>>` is not implemented for `Arc<dyn Db>`
+   = help: the trait `for<'c> FromContainer<_, &'c Container<satisfy::typed_list::Nil>>` is not implemented for `Arc<dyn Db>`
    = note: `Arc<dyn Db>` needs `.provide(..)` or a `FromContainer` impl; `.override_with(..)` only replaces an existing default
 help: the trait `FromContainer<(), C>` is implemented for `Postgres`
   --> tests/compile_fail/dyn_override_with.rs:9:1

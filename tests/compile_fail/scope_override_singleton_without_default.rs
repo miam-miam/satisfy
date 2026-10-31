@@ -1,5 +1,5 @@
 // A scope's `override_singleton` on a `dyn Db` also needs a `dyn_default!` to replace.
-use di::Container;
+use satisfy::Container;
 use std::sync::Arc;
 
 trait Db: Send + Sync {}

@@ -1,6 +1,6 @@
 #![expect(dead_code, clippy::disallowed_names)]
 
-use di::{Container, FromContainer, Resolve, ResolveAll};
+use satisfy::{Container, FromContainer, Resolve, ResolveAll};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -91,7 +91,7 @@ impl<C> FromContainer<(), C> for Postgres {
 }
 
 // `Arc<dyn Database>` and `&dyn Database` resolve to one shared `Postgres`.
-di::dyn_default!(dyn Database => Postgres);
+satisfy::dyn_default!(dyn Database => Postgres);
 
 // Depends on a defaulted foreign type and a provided foreign type (String).
 struct Service {

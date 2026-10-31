@@ -39,7 +39,7 @@ pub struct InParent<I>(PhantomData<I>);
 /// Requires `T: Clone`, each instance is a separate copy.
 ///
 /// ```
-/// # use di::Container;
+/// # use satisfy::Container;
 /// let c = Container::new().provide(String::from("prod")).provide(8080u16);
 /// let label: String = c.resolve();
 /// assert_eq!(label, "prod");
@@ -49,7 +49,7 @@ pub struct Here;
 /// Create a `&T` borrowed from a provided `T`.
 ///
 /// ```
-/// # use di::Container;
+/// # use satisfy::Container;
 /// // Not `Clone`, so it can only be borrowed.
 /// struct Config {
 ///     retries: u32,
@@ -65,7 +65,7 @@ pub struct HereRef;
 /// borrowed as `&dyn Trait`.
 ///
 /// ```
-/// # use di::Container;
+/// # use satisfy::Container;
 /// use std::sync::Arc;
 ///
 /// trait Db: Send + Sync {
@@ -88,7 +88,7 @@ pub struct HereDeref;
 /// Built from [`FromContainer`], unless overridden.
 ///
 /// ```
-/// # use di::{Container, FromContainer, Resolve};
+/// # use satisfy::{Container, FromContainer, Resolve};
 /// // `Clone` is only needed by `override_with`.
 /// #[derive(Clone)]
 /// struct Greeting(String);
@@ -115,7 +115,7 @@ pub struct AutoBuild<I>(PhantomData<I>);
 /// Creates a singleton per container, behind an `Arc<T>`.
 ///
 /// ```
-/// # use di::{Container, FromContainer};
+/// # use satisfy::{Container, FromContainer};
 /// # use std::sync::Arc;
 /// struct Pool;
 ///
@@ -138,7 +138,7 @@ pub struct SharedArc<I>(PhantomData<I>);
 /// Creates a singleton per container, behind a `&T`.
 ///
 /// ```
-/// # use di::{Container, FromContainer};
+/// # use satisfy::{Container, FromContainer};
 /// # use std::sync::Arc;
 /// struct Pool;
 ///
@@ -161,7 +161,7 @@ pub struct SharedRef<I>(PhantomData<I>);
 #[diagnostic::on_unimplemented(
     message = "this container can't resolve `{T}`",
     label = "`{T}` can't be resolved here",
-    note = "`{T}` needs `.provide(..)`; a shared `Arc<X>` or `&X` can instead be built from `X`'s `FromContainer` impl if `X: Send + Sync`, or for a `dyn Trait`, from `di::dyn_default!(dyn Trait => Impl)`",
+    note = "`{T}` needs `.provide(..)`; a shared `Arc<X>` or `&X` can instead be built from `X`'s `FromContainer` impl if `X: Send + Sync`, or for a `dyn Trait`, from `satisfy::dyn_default!(dyn Trait => Impl)`",
     note = "if `{T}` is provided, check no `FromContainer` impl pins it to a path like `Resolve<(), {T}>`; keep `I` generic"
 )]
 pub(crate) trait Locate<'c, T, I, C> {

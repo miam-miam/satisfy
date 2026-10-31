@@ -1,5 +1,5 @@
 // Pinning the dependency's path to `()` only works when it's built from a default.
-use di::{Container, FromContainer, Resolve};
+use satisfy::{Container, FromContainer, Resolve};
 
 #[derive(Clone)]
 struct Port(#[allow(dead_code)] u16);
