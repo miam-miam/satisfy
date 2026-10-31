@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "test-di"]
+members = ["."]
 
 [package]
 name = "satisfy"
@@ -12,3 +12,8 @@ license = "MIT OR Apache-2.0"
 
 [dev-dependencies]
 trybuild = "1"
+
+# Run tests for testing.rs example
+[[example]]
+name = "testing"
+test = true

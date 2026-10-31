@@ -67,7 +67,6 @@ impl<C> FromContainer<(), C> for Pool {
     }
 }
 
-// ---- foreign types ----
 trait Database: Send + Sync {
     fn name(&self) -> String;
 }
@@ -98,6 +97,7 @@ struct Service {
     db: Arc<dyn Database>,
     label: String,
 }
+
 impl<I, C> FromContainer<I, C> for Service
 where
     C: ResolveAll<I, (Arc<dyn Database>, String)>,
@@ -109,7 +109,10 @@ where
 }
 
 // Works with any container that can build a Service.
-fn describe<C: Resolve<I, Service>, I>(c: C) -> String {
+fn describe<C, I>(c: C) -> String
+where
+    C: Resolve<I, Service>,
+{
     let s: Service = c.resolve();
     format!("{} on {}", s.label, s.db.name())
 }

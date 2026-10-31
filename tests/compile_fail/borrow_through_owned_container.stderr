@@ -1,0 +1,27 @@
+error: implementation of `strategy::IntoValue` is not general enough
+  --> tests/compile_fail/borrow_through_owned_container.rs:16:13
+   |
+16 |     let _ = config(&c);
+   |             ^^^^^^^^^^ implementation of `strategy::IntoValue` is not general enough
+   |
+   = note: `&'0 Config` must implement `strategy::IntoValue<&Config>`, for any lifetime `'0`...
+   = note: ...but it actually implements `strategy::IntoValue<&'c Config>`
+
+error[E0597]: `c` does not live long enough
+  --> tests/compile_fail/borrow_through_owned_container.rs:16:20
+   |
+15 |     let c = Container::new().provide(Config);
+   |         - binding `c` declared here
+16 |     let _ = config(&c);
+   |             -------^^-
+   |             |      |
+   |             |      borrowed value does not live long enough
+   |             argument requires that `c` is borrowed for `'static`
+17 | }
+   | - `c` dropped here while still borrowed
+   |
+note: requirement that the value outlives `'static` introduced here
+  --> tests/compile_fail/borrow_through_owned_container.rs:9:8
+   |
+ 9 |     C: Resolve<I, &'a Config>,
+   |        ^^^^^^^^^^^^^^^^^^^^^^

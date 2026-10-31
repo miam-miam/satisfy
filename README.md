@@ -17,6 +17,8 @@ You [`provide`] the values that have no sensible default, such as configuration.
 
 ## Examples
 
+The [examples](https://github.com/miam-miam/satisfy/tree/main/examples) directory has more complete programs.
+
 ```rust
 use satisfy::{Container, FromContainer, Resolve};
 use std::sync::Arc;
