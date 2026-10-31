@@ -1,0 +1,23 @@
+error[E0277]: `Arc<dyn Db>` has no default (`FromContainer` impl)
+  --> tests/compile_fail/dyn_override_with.rs:19:44
+   |
+19 |     let c = Container::new().override_with(mock);
+   |                              ------------- ^^^^ no default for `Arc<dyn Db>`
+   |                              |
+   |                              required by a bound introduced by this call
+   |
+   = help: the trait `for<'c> FromContainer<_, &'c Container<di::typed_list::Nil>>` is not implemented for `Arc<dyn Db>`
+   = note: `Arc<dyn Db>` needs `.provide(..)` or a `FromContainer` impl; `.override_with(..)` only replaces an existing default
+help: the trait `FromContainer<(), C>` is implemented for `Postgres`
+  --> tests/compile_fail/dyn_override_with.rs:9:1
+   |
+ 9 | impl<C> FromContainer<(), C> for Postgres {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `Container::<TList>::override_with`
+  --> src/container.rs
+   |
+   |     pub fn override_with<T, I>(mut self, value: T) -> Self
+   |            ------------- required by a bound in this associated function
+   |     where
+   |         T: for<'c> FromContainer<I, &'c Self> + Clone + Send + Sync,
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Container::<TList>::override_with`

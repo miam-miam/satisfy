@@ -161,7 +161,8 @@ pub struct SharedRef<I>(PhantomData<I>);
 #[diagnostic::on_unimplemented(
     message = "this container can't resolve `{T}`",
     label = "`{T}` can't be resolved here",
-    note = "`{T}` needs `.provide(..)`, or a `FromContainer` impl whose dependencies are all resolvable"
+    note = "`{T}` needs `.provide(..)`; a shared `Arc<X>` or `&X` can instead be built from `X`'s `FromContainer` impl if `X: Send + Sync`, or for a `dyn Trait`, from `di::dyn_default!(dyn Trait => Impl)`",
+    note = "if `{T}` is provided, check no `FromContainer` impl pins it to a path like `Resolve<(), {T}>`; keep `I` generic"
 )]
 pub(crate) trait Locate<'c, T, I, C> {
     type Out;
@@ -174,6 +175,11 @@ pub(crate) trait Locate<'c, T, I, C> {
 /// Separate so `T: Clone` is checked after the path is chosen,
 /// keeping a provided value that also has a default ambiguous even when it isn't `Clone`
 /// as otherwise it would have been skipped for not matching trait bounds.
+#[diagnostic::on_unimplemented(
+    message = "a provided `{T}` can't be resolved by value because it isn't `Clone`",
+    label = "`{T}` isn't `Clone`",
+    note = "resolve `&{T}` to borrow it, or derive `Clone`"
+)]
 pub(crate) trait IntoValue<T> {
     fn into_value(self) -> T;
 }
@@ -184,6 +190,7 @@ impl<T> IntoValue<T> for T {
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl<T: Clone> IntoValue<T> for &T {
     fn into_value(self) -> T {
         self.clone()

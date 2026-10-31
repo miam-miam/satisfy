@@ -1,0 +1,51 @@
+error[E0277]: this container can't resolve `Arc<Pool>`
+ --> tests/compile_fail/shared_without_default.rs:9:26
+  |
+9 |     let _: Arc<Pool> = c.resolve();
+  |                          ^^^^^^^ `Arc<Pool>` can't be resolved here
+  |
+  = help: the trait `strategy::Locate<'_, Arc<Pool>, _, &Container<di::typed_list::Nil>>` is not implemented for `di::typed_list::Nil`
+  = note: `Arc<Pool>` needs `.provide(..)`; a shared `Arc<X>` or `&X` can instead be built from `X`'s `FromContainer` impl if `X: Send + Sync`, or for a `dyn Trait`, from `di::dyn_default!(dyn Trait => Impl)`
+  = note: if `Arc<Pool>` is provided, check no `FromContainer` impl pins it to a path like `Resolve<(), Arc<Pool>>`; keep `I` generic
+  = help: the following other types implement trait `strategy::Locate<'c, T, I, C>`:
+            `di::typed_list::Nil` implements `strategy::Locate<'_, &T, SharedRef<I>, &Container<R>>`
+            `di::typed_list::Nil` implements `strategy::Locate<'_, &T, SharedRef<I>, &Scoped<'_, Parent, TList>>`
+            `di::typed_list::Nil` implements `strategy::Locate<'_, Arc<T>, SharedArc<I>, &Container<R>>`
+            `di::typed_list::Nil` implements `strategy::Locate<'_, Arc<T>, SharedArc<I>, &Scoped<'_, Parent, TList>>`
+            `di::typed_list::Nil` implements `strategy::Locate<'_, T, AutoBuild<I>, &Container<R>>`
+            `di::typed_list::Nil` implements `strategy::Locate<'_, T, AutoBuild<I>, &Scoped<'_, Parent, TList>>`
+  = note: required for `&Container<di::typed_list::Nil>` to implement `Resolve<_, Arc<Pool>>`
+note: required by a bound in `Container::<TList>::resolve`
+ --> src/container.rs
+  |
+  |     pub fn resolve<'c, T, I>(&'c self) -> T
+  |            ------- required by a bound in this associated function
+  |     where
+  |         &'c Self: Resolve<I, T>,
+  |                   ^^^^^^^^^^^^^ required by this bound in `Container::<TList>::resolve`
+
+error[E0277]: this container can't resolve `&Pool`
+  --> tests/compile_fail/shared_without_default.rs:10:22
+   |
+10 |     let _: &Pool = c.resolve();
+   |                      ^^^^^^^ `&Pool` can't be resolved here
+   |
+   = help: the trait `strategy::Locate<'_, &Pool, _, &Container<di::typed_list::Nil>>` is not implemented for `di::typed_list::Nil`
+   = note: `&Pool` needs `.provide(..)`; a shared `Arc<X>` or `&X` can instead be built from `X`'s `FromContainer` impl if `X: Send + Sync`, or for a `dyn Trait`, from `di::dyn_default!(dyn Trait => Impl)`
+   = note: if `&Pool` is provided, check no `FromContainer` impl pins it to a path like `Resolve<(), &Pool>`; keep `I` generic
+   = help: the following other types implement trait `strategy::Locate<'c, T, I, C>`:
+             `di::typed_list::Nil` implements `strategy::Locate<'_, &T, SharedRef<I>, &Container<R>>`
+             `di::typed_list::Nil` implements `strategy::Locate<'_, &T, SharedRef<I>, &Scoped<'_, Parent, TList>>`
+             `di::typed_list::Nil` implements `strategy::Locate<'_, Arc<T>, SharedArc<I>, &Container<R>>`
+             `di::typed_list::Nil` implements `strategy::Locate<'_, Arc<T>, SharedArc<I>, &Scoped<'_, Parent, TList>>`
+             `di::typed_list::Nil` implements `strategy::Locate<'_, T, AutoBuild<I>, &Container<R>>`
+             `di::typed_list::Nil` implements `strategy::Locate<'_, T, AutoBuild<I>, &Scoped<'_, Parent, TList>>`
+   = note: required for `&Container<di::typed_list::Nil>` to implement `Resolve<_, &Pool>`
+note: required by a bound in `Container::<TList>::resolve`
+  --> src/container.rs
+   |
+   |     pub fn resolve<'c, T, I>(&'c self) -> T
+   |            ------- required by a bound in this associated function
+   |     where
+   |         &'c Self: Resolve<I, T>,
+   |                   ^^^^^^^^^^^^^ required by this bound in `Container::<TList>::resolve`

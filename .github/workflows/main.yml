@@ -39,7 +39,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Run cargo test
+        if: matrix.version == 'stable'
         run: cargo test
+
+      # The compile_fail stderr files are blessed against stable only.
+      - name: Run cargo test (without compile_fail)
+        if: matrix.version != 'stable'
+        run: cargo test -- --skip compile_fail
 
       - name: Run example
         run: cargo run --package test-di

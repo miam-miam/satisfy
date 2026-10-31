@@ -1,0 +1,11 @@
+error[E0597]: `app` does not live long enough
+  --> tests/compile_fail/scope_outlives_parent.rs:8:17
+   |
+ 7 |         let app = Container::new().provide(1u32);
+   |             --- binding `app` declared here
+ 8 |         scope = app.scope();
+   |                 ^^^ borrowed value does not live long enough
+ 9 |     }
+   |     - `app` dropped here while still borrowed
+10 |     let _: u32 = scope.resolve();
+   |                  ----- borrow later used here
