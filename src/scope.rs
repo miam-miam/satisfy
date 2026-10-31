@@ -71,6 +71,7 @@ impl<'p, Parent, TList> Scoped<'p, Parent, TList> {
     ///
     /// Use [`override_with`](Self::override_with) to override a
     /// type that has a [`FromContainer`] impl.
+    #[must_use]
     pub fn provide<T>(self, value: T) -> Scoped<'p, Parent, Cons<T, TList>> {
         Scoped {
             parent: self.parent,
@@ -87,6 +88,7 @@ impl<'p, Parent, TList> Scoped<'p, Parent, TList> {
     ///
     /// Takes precedence over the parent's override. Singletons are unaffected,
     /// use [`override_singleton`](Self::override_singleton) to override them.
+    #[must_use]
     pub fn override_with<T, I>(mut self, value: T) -> Self
     where
         T: for<'c> FromContainer<I, &'c Self> + Clone + Send + Sync,
@@ -101,6 +103,7 @@ impl<'p, Parent, TList> Scoped<'p, Parent, TList> {
     ///
     /// The parent and other scopes keep the parent's singleton.
     /// Singletons the parent builds keep using the parent's instance for their own dependencies.
+    #[must_use]
     pub fn override_singleton<T, I>(mut self, value: Arc<T>) -> Self
     where
         T: ?Sized + Shared<I, &'p Container<Parent>, Stored = T> + Send + Sync + 'static,

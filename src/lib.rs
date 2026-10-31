@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![warn(missing_docs)]
 
 #[doc = include_str!("../compile-errors.md")]
 pub mod guide_compile_errors {}
@@ -24,7 +25,74 @@ use strategy::{Skip, SkipPath};
 /// A default way to build `Self` from a container.
 /// `I` is the resolution path of the dependencies (see [`strategy`]): keep it generic and pass it
 /// to the `Resolve` bound.
-// TODO: Document this
+///
+/// A type with no dependencies pins `I` to `()`. A type with dependencies stays generic over `I`
+/// and `C`, and lists what it needs as [`Resolve`] or [`ResolveAll`] bounds on `C`:
+///
+/// ```
+/// # use satisfy::{Container, FromContainer, ResolveAll};
+///
+/// #[derive(Clone)]
+/// struct ApiKey(String);
+///
+/// struct RetryPolicy {
+///     attempts: u8,
+/// }
+///
+/// impl<C> FromContainer<(), C> for RetryPolicy {
+///     fn from_container(_: C) -> Self {
+///         RetryPolicy { attempts: 3 }
+///     }
+/// }
+///
+/// struct WeatherClient {
+///     key: String,
+///     attempts: u8,
+/// }
+///
+/// impl<I, C> FromContainer<I, C> for WeatherClient
+/// where
+///     C: ResolveAll<I, (ApiKey, RetryPolicy)>,
+/// {
+///     fn from_container(c: C) -> Self {
+///         let (key, retry) = c.resolve_all();
+///         WeatherClient { key: key.0, attempts: retry.attempts }
+///     }
+/// }
+///
+/// // `ApiKey` has no default, so it must be provided; the rest are built on demand.
+/// let container = Container::new().provide(ApiKey("secret".into()));
+/// let client: WeatherClient = container.resolve();
+/// assert_eq!(client.key, "secret");
+/// assert_eq!(client.attempts, 3);
+/// ```
+///
+/// To give a default to a type from another crate, wrap `I` in a local marker so the orphan rules
+/// allow the impl. If two crates do this for the same type, resolving it becomes ambiguous.
+///
+/// ```
+/// use satisfy::{Container, FromContainer, Resolve};
+/// use std::marker::PhantomData;
+/// use std::path::PathBuf;
+///
+/// struct Mine<I>(PhantomData<I>);
+///
+/// #[derive(Clone)]
+/// struct AppName(&'static str);
+///
+/// impl<I, C> FromContainer<Mine<I>, C> for PathBuf
+/// where
+///     C: Resolve<I, AppName>,
+/// {
+///     fn from_container(c: C) -> Self {
+///         let name: AppName = c.resolve();
+///         PathBuf::from("/var/lib").join(name.0)
+///     }
+/// }
+///
+/// let data_dir: PathBuf = Container::new().provide(AppName("notes")).resolve();
+/// assert_eq!(data_dir, PathBuf::from("/var/lib/notes"));
+/// ```
 // `I` comes first so that a downstream crate can give a default to a
 // foreign type by using a local marker as `I` (orphan rules require a
 // local type before any uncovered type parameter such as `C`).
@@ -34,6 +102,7 @@ use strategy::{Skip, SkipPath};
     note = "`{Self}` needs `.provide(..)` or a `FromContainer` impl; `.override_with(..)` only replaces an existing default"
 )]
 pub trait FromContainer<I, C>: Sized + 'static {
+    /// Builds `Self`, resolving its dependencies from `c`.
     fn from_container(c: C) -> Self;
 }
 
@@ -86,7 +155,7 @@ where
     label = "`{T}` can't be resolved here",
     note = "`{T}` (or something it depends on) needs `.provide(..)`, or a `FromContainer` impl whose dependencies are all resolvable"
 )]
-pub trait Resolve<I, T> {
+pub trait Resolve<I, T>: sealed::Resolver {
     /// Resolves `T`, building it and its dependencies as needed.
     ///
     /// ```
@@ -217,6 +286,15 @@ pub trait ResolveAll<I, T: sealed::Tuple>:
 }
 
 mod sealed {
+    use crate::{Container, Scoped};
+
+    pub trait Resolver {}
+
+    impl<TList> Resolver for Container<TList> {}
+    impl<TList> Resolver for &Container<TList> {}
+    impl<Parent, TList> Resolver for Scoped<'_, Parent, TList> {}
+    impl<Parent, TList> Resolver for &Scoped<'_, Parent, TList> {}
+
     #[diagnostic::on_unimplemented(
         message = "`ResolveAll` takes a tuple of 2 to 12 dependencies, not `{Self}`",
         label = "not a tuple of 2 to 12 dependencies",

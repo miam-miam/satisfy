@@ -166,6 +166,8 @@ pub struct Container<TList> {
 }
 
 impl Container<Nil> {
+    /// Creates a container with nothing provided or overridden.
+    #[must_use]
     pub fn new() -> Self {
         Container {
             provided: Nil,
@@ -186,6 +188,19 @@ impl<TList> Container<TList> {
     ///
     /// For types with no [`FromContainer`] impl only. Use [`override_with`](Self::override_with)
     /// if you want to replace a [`FromContainer`] impl.
+    ///
+    /// ```
+    /// use satisfy::Container;
+    ///
+    /// #[derive(Clone)]
+    /// struct Currency(&'static str);
+    ///
+    /// let c = Container::new().provide(Currency("EUR")).provide(2u8);
+    /// let currency: Currency = c.resolve();
+    /// let decimals: &u8 = c.resolve();
+    /// assert_eq!((currency.0, *decimals), ("EUR", 2));
+    /// ```
+    #[must_use]
     pub fn provide<T>(self, value: T) -> Container<Cons<T, TList>> {
         Container {
             provided: Cons {
@@ -203,6 +218,24 @@ impl<TList> Container<TList> {
     ///
     /// A plain `T` resolves to a clone of `value`. The singleton behind `Arc<T>` and `&T` is
     /// built from a clone too, unless [`override_singleton`](Self::override_singleton) sets it.
+    ///
+    /// ```
+    /// use satisfy::{Container, FromContainer};
+    ///
+    /// #[derive(Clone)]
+    /// struct TaxRate(f32);
+    ///
+    /// impl<C> FromContainer<(), C> for TaxRate {
+    ///     fn from_container(_: C) -> Self {
+    ///         TaxRate(0.2)
+    ///     }
+    /// }
+    ///
+    /// let exempt = Container::new().override_with(TaxRate(0.0));
+    /// let rate: TaxRate = exempt.resolve();
+    /// assert_eq!(rate.0, 0.0);
+    /// ```
+    #[must_use]
     pub fn override_with<T, I>(mut self, value: T) -> Self
     where
         T: for<'c> FromContainer<I, &'c Self> + Clone + Send + Sync,
@@ -221,6 +254,27 @@ impl<TList> Container<TList> {
     /// Only `Arc<T>` and `&T` resolve to this instance. A plain `T` is still built, from
     /// [`override_with`](Self::override_with)'s value if one is set, otherwise from its
     /// [`FromContainer`] impl.
+    ///
+    /// ```
+    /// use satisfy::{Container, FromContainer};
+    /// use std::sync::Arc;
+    /// use std::sync::atomic::{AtomicU64, Ordering};
+    ///
+    /// struct Counter(AtomicU64);
+    ///
+    /// impl<C> FromContainer<(), C> for Counter {
+    ///     fn from_container(_: C) -> Self {
+    ///         Counter(AtomicU64::new(0))
+    ///     }
+    /// }
+    ///
+    /// let seeded = Arc::new(Counter(AtomicU64::new(100)));
+    /// let c = Container::new().override_singleton(seeded.clone());
+    /// let counter: &Counter = c.resolve();
+    /// counter.0.fetch_add(1, Ordering::Relaxed);
+    /// assert_eq!(seeded.0.load(Ordering::Relaxed), 101);
+    /// ```
+    #[must_use]
     pub fn override_singleton<T, I>(mut self, value: Arc<T>) -> Self
     where
         T: ?Sized + for<'c> Shared<I, &'c Self, Stored = T> + Send + Sync + 'static,
@@ -300,6 +354,7 @@ impl<TList> Container<TList> {
     /// assert!(Arc::ptr_eq(&a.pool, &b.pool));
     /// assert!(Arc::ptr_eq(&a.pool, &app_pool));
     /// ```
+    #[must_use]
     pub fn scope(&self) -> Scoped<'_, TList, ScopeEnd> {
         Scoped::new(self)
     }
