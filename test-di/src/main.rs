@@ -150,18 +150,4 @@ fn main() {
     // Provided values can be borrowed rather than cloned.
     let label: &String = prod.resolve();
     println!("borrowed {label}");
-
-    // Compile errors
-
-    // error[E0277]: this container can't resolve `Foo2`  (Baz never provided)
-    // let _: Foo2 = Container::new().resolve();
-
-    // error[E0277]: `Baz` has no default (`FromContainer` impl)
-    // let _ = Container::new().override_with(Baz { n: 1 });
-
-    // error[E0283]: type annotations needed  (Baz provided twice)
-    // let _: Baz = Container::new().provide(Baz { n: 1 }).provide(Baz { n: 2 }).resolve();
-
-    // error[E0283]: type annotations needed  (Bar provided but also has a default)
-    // let _: Bar = Container::new().provide(Bar { s: "x".into() }).resolve();
 }

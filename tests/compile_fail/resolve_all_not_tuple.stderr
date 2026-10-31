@@ -1,0 +1,72 @@
+error[E0277]: `ResolveAll` takes a tuple of 2 to 12 dependencies, not `u32`
+ --> tests/compile_fail/resolve_all_not_tuple.rs:6:20
+  |
+6 |     let _: u32 = c.resolve_all();
+  |                    ^^^^^^^^^^^ not a tuple of 2 to 12 dependencies
+  |
+  = help: the trait `di::sealed::Tuple` is not implemented for `u32`
+  = note: to resolve a single dependency, use `Resolve` (`.resolve()`) instead
+  = help: the following other types implement trait `di::sealed::Tuple`:
+            (T₁, T₂, …, Tₙ) for tuples of arity 2 up to and including 12
+note: required by a bound in `Container::<TList>::resolve_all`
+ --> src/container.rs
+  |
+  |     pub fn resolve_all<'c, T, I>(&'c self) -> T
+  |            ----------- required by a bound in this associated function
+  |     where
+  |         T: crate::sealed::Tuple,
+  |            ^^^^^^^^^^^^^^^^^^^^ required by this bound in `Container::<TList>::resolve_all`
+
+error[E0277]: `ResolveAll` takes a tuple of 2 to 12 dependencies, not `u32`
+ --> tests/compile_fail/resolve_all_not_tuple.rs:6:20
+  |
+6 |     let _: u32 = c.resolve_all();
+  |                    ^^^^^^^^^^^ not a tuple of 2 to 12 dependencies
+  |
+  = help: the trait `ResolveAll<_, u32>` is not implemented for `&Container<di::typed_list::Cons<u32, di::typed_list::Nil>>`
+  = note: to resolve a single dependency, use `Resolve` (`.resolve()`) instead
+note: required by a bound in `Container::<TList>::resolve_all`
+ --> src/container.rs
+  |
+  |     pub fn resolve_all<'c, T, I>(&'c self) -> T
+  |            ----------- required by a bound in this associated function
+...
+  |         &'c Self: ResolveAll<I, T>,
+  |                   ^^^^^^^^^^^^^^^^ required by this bound in `Container::<TList>::resolve_all`
+
+error[E0277]: `ResolveAll` takes a tuple of 2 to 12 dependencies, not `(u32,)`
+ --> tests/compile_fail/resolve_all_not_tuple.rs:7:23
+  |
+7 |     let _: (u32,) = c.resolve_all();
+  |                       ^^^^^^^^^^^ not a tuple of 2 to 12 dependencies
+  |
+  = help: the trait `di::sealed::Tuple` is not implemented for `(u32,)`
+  = note: to resolve a single dependency, use `Resolve` (`.resolve()`) instead
+  = note: `(u32,)` implements similarly named trait `std::marker::Tuple`, but not `di::sealed::Tuple`
+  = help: the following other types implement trait `di::sealed::Tuple`:
+            (T₁, T₂, …, Tₙ) for tuples of arity 2 up to and including 12
+note: required by a bound in `Container::<TList>::resolve_all`
+ --> src/container.rs
+  |
+  |     pub fn resolve_all<'c, T, I>(&'c self) -> T
+  |            ----------- required by a bound in this associated function
+  |     where
+  |         T: crate::sealed::Tuple,
+  |            ^^^^^^^^^^^^^^^^^^^^ required by this bound in `Container::<TList>::resolve_all`
+
+error[E0277]: `ResolveAll` takes a tuple of 2 to 12 dependencies, not `(u32,)`
+ --> tests/compile_fail/resolve_all_not_tuple.rs:7:23
+  |
+7 |     let _: (u32,) = c.resolve_all();
+  |                       ^^^^^^^^^^^ not a tuple of 2 to 12 dependencies
+  |
+  = help: the trait `ResolveAll<_, (u32,)>` is not implemented for `&Container<di::typed_list::Cons<u32, di::typed_list::Nil>>`
+  = note: to resolve a single dependency, use `Resolve` (`.resolve()`) instead
+note: required by a bound in `Container::<TList>::resolve_all`
+ --> src/container.rs
+  |
+  |     pub fn resolve_all<'c, T, I>(&'c self) -> T
+  |            ----------- required by a bound in this associated function
+...
+  |         &'c Self: ResolveAll<I, T>,
+  |                   ^^^^^^^^^^^^^^^^ required by this bound in `Container::<TList>::resolve_all`

@@ -1,0 +1,11 @@
+error[E0597]: `c` does not live long enough
+  --> tests/compile_fail/borrow_outlives_container.rs:10:18
+   |
+ 9 |         let c = Container::new().provide(Config);
+   |             - binding `c` declared here
+10 |         config = c.resolve();
+   |                  ^ borrowed value does not live long enough
+11 |     }
+   |     - `c` dropped here while still borrowed
+12 |     let _ = config;
+   |             ------ borrow later used here

@@ -1,0 +1,63 @@
+error[E0277]: `Port` has no default (`FromContainer` impl)
+  --> tests/compile_fail/scope_missing_provide.rs:10:25
+   |
+10 |     let _: Port = scope.resolve();
+   |                         ^^^^^^^ no default for `Port`
+   |
+help: the trait `FromContainer<_, &Scoped<'_, di::typed_list::Nil, di::typed_list::ScopeEnd>>` is not implemented for `Port`
+  --> tests/compile_fail/scope_missing_provide.rs:5:1
+   |
+ 5 | struct Port(#[allow(dead_code)] u16);
+   | ^^^^^^^^^^^
+   = note: `Port` needs `.provide(..)` or a `FromContainer` impl; `.override_with(..)` only replaces an existing default
+help: the trait `Resolve<I, T>` is conditionally implemented for `&Scoped<'_, Parent, TList>`
+  --> src/scope.rs
+   |
+   | / impl<'c, 'p, Parent, TList, T, I> Resolve<I, T> for &'c Scoped<'p, Parent, TList>
+   | | where
+   | |     TList: Locate<'c, T, I, &'c Scoped<'p, Parent, TList>>,
+   | |            ----------------------------------------------- unsatisfied requirement introduced here: `di::typed_list::ScopeEnd: strategy::Locate<'_, Port, InParent<AutoBuild<_>>, &Scoped<'_, di::typed_list::Nil, di::typed_list::ScopeEnd>>`
+   | |     TList::Out: IntoValue<T>,
+   | |_________________------------^
+   |                   |
+   |                   unsatisfied requirement introduced here: `<di::typed_list::ScopeEnd as strategy::Locate<'_, Port, InParent<AutoBuild<_>>, &Scoped<'_, di::typed_list::Nil, di::typed_list::ScopeEnd>>>::Out: strategy::IntoValue<Port>`
+   |                   unsatisfied requirement introduced here: `<di::typed_list::ScopeEnd as strategy::Locate<'_, Port, InParent<AutoBuild<_>>, &Scoped<'_, di::typed_list::Nil, di::typed_list::ScopeEnd>>>::Out: strategy::IntoValue<Port>`
+   = note: required for `di::typed_list::Nil` to implement `strategy::Locate<'_, Port, AutoBuild<_>, &Scoped<'_, di::typed_list::Nil, di::typed_list::ScopeEnd>>`
+   = note: 1 redundant requirement hidden
+   = note: required for `di::typed_list::ScopeEnd` to implement `strategy::Locate<'_, Port, InParent<AutoBuild<_>>, &Scoped<'_, di::typed_list::Nil, di::typed_list::ScopeEnd>>`
+   = note: required for `&Scoped<'_, di::typed_list::Nil, di::typed_list::ScopeEnd>` to implement `Resolve<InParent<AutoBuild<_>>, Port>`
+note: required by a bound in `Scoped::<'p, Parent, TList>::resolve`
+  --> src/scope.rs
+   |
+   |     pub fn resolve<'c, T, I>(&'c self) -> T
+   |            ------- required by a bound in this associated function
+   |     where
+   |         &'c Self: Resolve<I, T>,
+   |                   ^^^^^^^^^^^^^ required by this bound in `Scoped::<'p, Parent, TList>::resolve`
+
+error[E0277]: this container can't resolve `Arc<Port>`
+  --> tests/compile_fail/scope_missing_provide.rs:11:30
+   |
+11 |     let _: Arc<Port> = scope.resolve();
+   |                              ^^^^^^^ `Arc<Port>` can't be resolved here
+   |
+   = help: the trait `strategy::Locate<'_, Arc<Port>, _, &Scoped<'_, di::typed_list::Nil, di::typed_list::ScopeEnd>>` is not implemented for `di::typed_list::Nil`
+   = note: `Arc<Port>` needs `.provide(..)`; a shared `Arc<X>` or `&X` can instead be built from `X`'s `FromContainer` impl if `X: Send + Sync`, or for a `dyn Trait`, from `di::dyn_default!(dyn Trait => Impl)`
+   = note: if `Arc<Port>` is provided, check no `FromContainer` impl pins it to a path like `Resolve<(), Arc<Port>>`; keep `I` generic
+   = help: `di::typed_list::Nil` implements trait `strategy::Locate<'c, T, I, C>`:
+             strategy::Locate<'_, &T, SharedRef<I>, &Container<R>>
+             strategy::Locate<'_, &T, SharedRef<I>, &Scoped<'_, Parent, TList>>
+             strategy::Locate<'_, Arc<T>, SharedArc<I>, &Container<R>>
+             strategy::Locate<'_, Arc<T>, SharedArc<I>, &Scoped<'_, Parent, TList>>
+             strategy::Locate<'_, T, AutoBuild<I>, &Container<R>>
+             strategy::Locate<'_, T, AutoBuild<I>, &Scoped<'_, Parent, TList>>
+   = note: required for `di::typed_list::ScopeEnd` to implement `strategy::Locate<'_, Arc<Port>, InParent<_>, &Scoped<'_, di::typed_list::Nil, di::typed_list::ScopeEnd>>`
+   = note: required for `&Scoped<'_, di::typed_list::Nil, di::typed_list::ScopeEnd>` to implement `Resolve<InParent<_>, Arc<Port>>`
+note: required by a bound in `Scoped::<'p, Parent, TList>::resolve`
+  --> src/scope.rs
+   |
+   |     pub fn resolve<'c, T, I>(&'c self) -> T
+   |            ------- required by a bound in this associated function
+   |     where
+   |         &'c Self: Resolve<I, T>,
+   |                   ^^^^^^^^^^^^^ required by this bound in `Scoped::<'p, Parent, TList>::resolve`

@@ -22,6 +22,9 @@
 //! assert_eq!(greeter.config.name, "world");
 //! ```
 
+#[doc = include_str!("../compile-errors.md")]
+pub mod guide_compile_errors {}
+
 mod container;
 mod once_map;
 mod scope;
@@ -46,7 +49,7 @@ use std::sync::Arc;
 #[diagnostic::on_unimplemented(
     message = "`{Self}` has no default (`FromContainer` impl)",
     label = "no default for `{Self}`",
-    note = "`.provide(..)` a `{Self}`, or give it a `FromContainer` impl; `.override_with(..)` only replaces an existing default"
+    note = "`{Self}` needs `.provide(..)` or a `FromContainer` impl; `.override_with(..)` only replaces an existing default"
 )]
 pub trait FromContainer<I, C>: Sized + 'static {
     fn from_container(c: C) -> Self;
@@ -62,7 +65,7 @@ pub trait FromContainer<I, C>: Sized + 'static {
 #[diagnostic::on_unimplemented(
     message = "`{Self}` has no shared instance",
     label = "no shared instance for `{Self}`",
-    note = "give `{Self}` a `FromContainer` impl, or if it is a `dyn Trait`, use `di::dyn_default!(dyn Trait => Impl)`"
+    note = "give `{Self}` a `FromContainer` impl; for a `dyn Trait`, use `di::dyn_default!(dyn Trait => Impl)`"
 )]
 pub trait Shared<I, C> {
     /// `Self` with its lifetimes widened to `'static`, which the singleton is stored and keyed as.
@@ -76,6 +79,7 @@ pub trait Shared<I, C> {
 
 // The `T: FromContainer` bound keeps provided values out, so their `&T` stays a plain borrow
 // and doesn't also match the singleton path.
+#[diagnostic::do_not_recommend]
 impl<T, I, J, C> Shared<(I, J), C> for T
 where
     T: FromContainer<J, C> + Send + Sync,
@@ -109,6 +113,12 @@ pub trait Resolve<I, T> {
 /// Written as its own trait rather than a
 /// [`Resolve`] impl so the elements may borrow from the container. For one dependency, use [`Resolve`].
 /// `I` is a tuple of the elements' resolution paths, inferred (see [`strategy`] for more details).
+// Matches `Tuple`'s message, as both bounds fail together for a non-tuple.
+#[diagnostic::on_unimplemented(
+    message = "`ResolveAll` takes a tuple of 2 to 12 dependencies, not `{T}`",
+    label = "not a tuple of 2 to 12 dependencies",
+    note = "to resolve a single dependency, use `Resolve` (`.resolve()`) instead"
+)]
 pub trait ResolveAll<I, T: sealed::Tuple> {
     fn resolve_all(&self) -> T;
 }

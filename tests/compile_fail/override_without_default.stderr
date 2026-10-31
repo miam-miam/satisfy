@@ -1,0 +1,22 @@
+error[E0277]: `Port` has no default (`FromContainer` impl)
+ --> tests/compile_fail/override_without_default.rs:8:44
+  |
+8 |     let _ = Container::new().override_with(Port(8080));
+  |                              ------------- ^^^^^^^^^^ no default for `Port`
+  |                              |
+  |                              required by a bound introduced by this call
+  |
+help: the trait `for<'c> FromContainer<_, &'c Container<di::typed_list::Nil>>` is not implemented for `Port`
+ --> tests/compile_fail/override_without_default.rs:5:1
+  |
+5 | struct Port(#[allow(dead_code)] u16);
+  | ^^^^^^^^^^^
+  = note: `Port` needs `.provide(..)` or a `FromContainer` impl; `.override_with(..)` only replaces an existing default
+note: required by a bound in `Container::<TList>::override_with`
+ --> src/container.rs
+  |
+  |     pub fn override_with<T, I>(mut self, value: T) -> Self
+  |            ------------- required by a bound in this associated function
+  |     where
+  |         T: for<'c> FromContainer<I, &'c Self> + Clone + Send + Sync,
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Container::<TList>::override_with`
