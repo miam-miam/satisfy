@@ -9,6 +9,16 @@ error[E0283]: type annotations needed
              where Tail: strategy::Locate<'c, T, I, C>;
            - impl<'c, T, Tail, C> strategy::Locate<'c, T, Here, C> for di::typed_list::Cons<T, Tail>
              where T: 'c;
+   = note: cannot satisfy `<di::typed_list::Cons<Port, di::typed_list::Nil> as strategy::Locate<'_, Port, _, &Container<di::typed_list::Cons<Port, di::typed_list::Nil>>>>::Out == _`
+   = note: required for `&Container<di::typed_list::Cons<Port, di::typed_list::Nil>>` to implement `Resolve<_, Port>`
+note: required by a bound in `Container::<TList>::resolve`
+  --> src/container.rs
+   |
+   |     pub fn resolve<'c, T, I>(&'c self) -> T
+   |            ------- required by a bound in this associated function
+   |     where
+   |         &'c Self: Resolve<I, T>,
+   |                   ^^^^^^^^^^^^^ required by this bound in `Container::<TList>::resolve`
    = note: required for `&Container<di::typed_list::Cons<Port, di::typed_list::Nil>>` to implement `Resolve<_, Port>`
 note: required by a bound in `Container::<TList>::resolve`
   --> src/container.rs
