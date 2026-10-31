@@ -192,6 +192,19 @@ where
     }
 }
 
+/// Resolves values that don't borrow from the scope, so generic code can bound
+/// `S: Resolve<I, T>` instead of `for<'c> &'c S: Resolve<I, T>`.
+// Hidden from diagnostics, so errors keep pointing at the `&Scoped` impl's unmet requirement.
+#[diagnostic::do_not_recommend]
+impl<'p, Parent, TList, T, I> Resolve<I, T> for Scoped<'p, Parent, TList>
+where
+    for<'c> &'c Scoped<'p, Parent, TList>: Resolve<I, T>,
+{
+    fn resolve(&self) -> T {
+        <&Scoped<'p, Parent, TList> as Resolve<I, T>>::resolve(&self)
+    }
+}
+
 // End of the scope's list: continue in the parent's.
 impl<'c, 'p, T, I, Parent, TList> Locate<'c, T, InParent<I>, &'c Scoped<'p, Parent, TList>>
     for ScopeEnd

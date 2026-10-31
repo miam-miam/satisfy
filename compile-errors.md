@@ -33,14 +33,20 @@ This appears for shared instances (singletons). Check the following in order:
 A `FromContainer` impl has pinned the path in its bound:
 
 ```rust,ignore
-impl<C: Resolve<(), Port>> FromContainer<(), C> for Server { ... }
+impl<C> FromContainer<(), C> for Server
+where
+    C: Resolve<(), Port>,
+{ ... }
 ```
 
 `()` belongs in `FromContainer<(), C>` for a type with no dependencies. It isn't a path a `Resolve`
 bound can take, so this bound can never be met. Keep the path generic and pass it through instead:
 
 ```rust,ignore
-impl<I, C: Resolve<I, Port>> FromContainer<I, C> for Server { ... }
+impl<I, C> FromContainer<I, C> for Server
+where
+    C: Resolve<I, Port>,
+{ ... }
 ```
 
 ## The error names a type you didn't resolve
@@ -65,3 +71,28 @@ yourself.
 A resolved `&T` borrows the container, and a scope borrows its parent. Neither can outlive what it borrows from. Keep
 the container alive for as long as the reference or scope, or resolve an owned value instead: `Arc<T>` for a singleton,
 or `T` for a provided value that is `Clone`.
+
+## `implementation of IntoValue is not general enough`
+
+A bound on the container itself only covers values that don't borrow from it. This error appears when generic code uses
+one to ask for a borrow such as `&Config`:
+
+```rust,ignore
+fn config<'a, C, I>(c: &'a C) -> &'a Config
+where
+    C: Resolve<I, &'a Config>,
+{ ... }
+
+config(&container); // `C` is `Container<..>`
+```
+
+Take the reference as `C` instead, so the bound is on `&Container<..>`:
+
+```rust,ignore
+fn config<'a, C, I>(c: C) -> &'a Config
+where
+    C: Resolve<I, &'a Config>,
+{ ... }
+
+config(&container); // `C` is `&Container<..>`
+```

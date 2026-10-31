@@ -93,7 +93,10 @@ pub struct HereDeref;
 /// #[derive(Clone)]
 /// struct Greeting(String);
 ///
-/// impl<I, C: Resolve<I, String>> FromContainer<I, C> for Greeting {
+/// impl<I, C> FromContainer<I, C> for Greeting
+/// where
+///     C: Resolve<I, String>,
+/// {
 ///     fn from_container(c: C) -> Self {
 ///         let name: String = c.resolve();
 ///         Greeting(format!("hello {name}"))

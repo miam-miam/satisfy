@@ -37,7 +37,10 @@ use crate::{FromContainer, Resolve, ResolveAll, Shared};
 ///     config: GreeterConfig,
 /// }
 ///
-/// impl<I, C: Resolve<I, GreeterConfig>> FromContainer<I, C> for Greeter {
+/// impl<I, C> FromContainer<I, C> for Greeter
+/// where
+///     C: Resolve<I, GreeterConfig>,
+/// {
 ///     fn from_container(c: C) -> Self {
 ///         Greeter { config: c.resolve() }
 ///     }
@@ -74,7 +77,10 @@ use crate::{FromContainer, Resolve, ResolveAll, Shared};
 /// }
 ///
 /// // Borrow from the container lifetime 'c
-/// impl<'c, I, C: Resolve<I, &'c DbConfig>> FromContainer<I, C> for Pool {
+/// impl<'c, I, C> FromContainer<I, C> for Pool
+/// where
+///     C: Resolve<I, &'c DbConfig>,
+/// {
 ///     fn from_container(c: C) -> Self {
 ///         let config = c.resolve();
 ///         Pool { url: config.url.clone() }
@@ -96,6 +102,8 @@ use crate::{FromContainer, Resolve, ResolveAll, Shared};
 ///
 /// The container's type grows with every [`provide`](Self::provide) (`Container<Cons<Config, Nil>>`), so
 /// rather than naming it, write code against `C: Resolve<I, T>` and pass `&container`.
+/// Code that holds the container itself, such as an `Arc<C>` in shared state, can use the same
+/// bound for values that don't borrow from it.
 ///
 /// # Overriding defaults in tests
 ///
@@ -116,7 +124,10 @@ use crate::{FromContainer, Resolve, ResolveAll, Shared};
 ///     }
 /// }
 ///
-/// fn mail_host<C: Resolve<I, Mailer>, I>(c: C) -> String {
+/// fn mail_host<C, I>(c: C) -> String
+/// where
+///     C: Resolve<I, Mailer>,
+/// {
 ///     let mailer: Mailer = c.resolve();
 ///     mailer.host
 /// }
@@ -269,7 +280,10 @@ impl<TList> Container<TList> {
     ///     pool: Arc<Pool>,
     /// }
     ///
-    /// impl<'c, I, C: ResolveAll<I, (&'c RequestId, Arc<Pool>)>> FromContainer<I, C> for Handler {
+    /// impl<'c, I, C> FromContainer<I, C> for Handler
+    /// where
+    ///     C: ResolveAll<I, (&'c RequestId, Arc<Pool>)>,
+    /// {
     ///     fn from_container(c: C) -> Self {
     ///         let (id, pool) = c.resolve_all();
     ///         Handler { id: id.0, pool }
@@ -350,6 +364,19 @@ where
     fn resolve(&self) -> T {
         let c: &'c Container<TList> = self;
         c.provided.locate(c).into_value()
+    }
+}
+
+/// Resolves values that don't borrow from the container, so code holding it by value (such as
+/// in an `Arc`) can bound `C: Resolve<I, T>` instead of `for<'c> &'c C: Resolve<I, T>`.
+// Hidden from diagnostics, so errors keep pointing at the `&Container` impl's unmet requirement.
+#[diagnostic::do_not_recommend]
+impl<TList, T, I> Resolve<I, T> for Container<TList>
+where
+    for<'c> &'c Container<TList>: Resolve<I, T>,
+{
+    fn resolve(&self) -> T {
+        <&Container<TList> as Resolve<I, T>>::resolve(&self)
     }
 }
 
