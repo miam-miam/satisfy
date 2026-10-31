@@ -1,26 +1,4 @@
-//! Compile-time checked dependency injection. Start with [`Container`].
-//!
-//! ```
-//! use di::{Container, FromContainer, Resolve};
-//!
-//! #[derive(Clone)]
-//! struct Config {
-//!     name: String,
-//! }
-//!
-//! struct Greeter {
-//!     config: Config,
-//! }
-//! impl<I, C: Resolve<I, Config>> FromContainer<I, C> for Greeter {
-//!     fn from_container(c: C) -> Self {
-//!         Greeter { config: c.resolve() }
-//!     }
-//! }
-//!
-//! let container = Container::new().provide(Config { name: "world".into() });
-//! let greeter: Greeter = container.resolve();
-//! assert_eq!(greeter.config.name, "world");
-//! ```
+#![doc = include_str!("../README.md")]
 
 #[doc = include_str!("../compile-errors.md")]
 pub mod guide_compile_errors {}

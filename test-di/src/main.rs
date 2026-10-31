@@ -1,4 +1,3 @@
-// ===================== app crate =====================
 #![expect(dead_code, clippy::disallowed_names)]
 
 use di::{Container, FromContainer, Resolve, ResolveAll};
