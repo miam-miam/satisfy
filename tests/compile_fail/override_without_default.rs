@@ -1,5 +1,5 @@
 // `override_with` only replaces a default, and `Port` has none.
-use di::Container;
+use satisfy::Container;
 
 #[derive(Clone)]
 struct Port(#[allow(dead_code)] u16);

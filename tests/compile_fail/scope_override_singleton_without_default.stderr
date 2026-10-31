@@ -4,8 +4,8 @@ error[E0277]: `dyn Db` has no shared instance
 12 |     let _ = app.scope().override_singleton::<dyn Db, _>(Arc::new(Mock));
    |                         ^^^^^^^^^^^^^^^^^^ no shared instance for `dyn Db`
    |
-   = help: the trait `di::Shared<(AutoBuild<_>, _), &Container<di::typed_list::Nil>>` is not implemented for `dyn Db`
-   = note: give `dyn Db` a `FromContainer` impl; for a `dyn Trait`, use `di::dyn_default!(dyn Trait => Impl)`
+   = help: the trait `satisfy::Shared<(AutoBuild<_>, _), &Container<satisfy::typed_list::Nil>>` is not implemented for `dyn Db`
+   = note: give `dyn Db` a `FromContainer` impl; for a `dyn Trait`, use `satisfy::dyn_default!(dyn Trait => Impl)`
 note: required by a bound in `Scoped::<'p, Parent, TList>::override_singleton`
   --> src/scope.rs
    |

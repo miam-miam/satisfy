@@ -12,13 +12,13 @@ You [`provide`] the values that have no sensible default, such as configuration.
 
 <sup>Satisfy currently supports rustc 1.85 and above.</sup>
 
-[`provide`]: https://docs.rs/satisfy/latest/di/struct.Container.html#method.provide
-[`FromContainer`]: https://docs.rs/satisfy/latest/di/trait.FromContainer.html
+[`provide`]: https://docs.rs/satisfy/latest/satisfy/struct.Container.html#method.provide
+[`FromContainer`]: https://docs.rs/satisfy/latest/satisfy/trait.FromContainer.html
 
 ## Examples
 
 ```rust
-use di::{Container, FromContainer, Resolve};
+use satisfy::{Container, FromContainer, Resolve};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -78,7 +78,7 @@ error[E0277]: this container can't resolve `Arc<Pool>`
 
 The [compile errors guide] explains the less obvious errors.
 
-[compile errors guide]: https://docs.rs/satisfy/latest/di/guide_compile_errors/index.html
+[compile errors guide]: https://docs.rs/satisfy/latest/satisfy/guide_compile_errors/index.html
 
 ### Overrides
 
@@ -87,7 +87,7 @@ replaces only the singleton behind `Arc<T>` and `&T`. It doesn't need `Clone`, s
 a default with [`dyn_default!`].
 
 ```rust
-use di::{Container, FromContainer};
+use satisfy::{Container, FromContainer};
 use std::sync::Arc;
 
 trait Mailer: Send + Sync {
@@ -107,7 +107,7 @@ impl<C> FromContainer<(), C> for Smtp {
     }
 }
 
-di::dyn_default!(dyn Mailer => Smtp);
+satisfy::dyn_default!(dyn Mailer => Smtp);
 
 struct Fake;
 impl Mailer for Fake {
@@ -125,9 +125,9 @@ let mailer: Arc<dyn Mailer> = test.resolve();
 assert_eq!(mailer.host(), "localhost");
 ```
 
-[`override_with`]: https://docs.rs/satisfy/latest/di/struct.Container.html#method.override_with
-[`override_singleton`]: https://docs.rs/satisfy/latest/di/struct.Container.html#method.override_singleton
-[`dyn_default!`]: https://docs.rs/satisfy/latest/di/macro.dyn_default.html
+[`override_with`]: https://docs.rs/satisfy/latest/satisfy/struct.Container.html#method.override_with
+[`override_singleton`]: https://docs.rs/satisfy/latest/satisfy/struct.Container.html#method.override_singleton
+[`dyn_default!`]: https://docs.rs/satisfy/latest/satisfy/macro.dyn_default.html
 
 ### Scopes
 
@@ -137,7 +137,7 @@ shares its parent's singletons. It can't provide a type the parent already provi
 You can also use [`ResolveAll`] to take several dependencies at once.
 
 ```rust
-use di::{Container, FromContainer, ResolveAll};
+use satisfy::{Container, FromContainer, ResolveAll};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -155,7 +155,10 @@ struct Handler {
     pool: Arc<Pool>,
 }
 
-impl<I, C: ResolveAll<I, (RequestId, Arc<Pool>)>> FromContainer<I, C> for Handler {
+impl<I, C> FromContainer<I, C> for Handler
+where
+    C: ResolveAll<I, (RequestId, Arc<Pool>)>
+{
     fn from_container(c: C) -> Self {
         let (id, pool) = c.resolve_all();
         Handler { id, pool }
@@ -170,8 +173,8 @@ assert_eq!((first.id.0, second.id.0), (1, 2));
 assert!(Arc::ptr_eq(&first.pool, &second.pool));
 ```
 
-[`scope`]: https://docs.rs/satisfy/latest/di/struct.Container.html#method.scope
-[`ResolveAll`]: https://docs.rs/satisfy/latest/di/trait.ResolveAll.html
+[`scope`]: https://docs.rs/satisfy/latest/satisfy/struct.Container.html#method.scope
+[`ResolveAll`]: https://docs.rs/satisfy/latest/satisfy/trait.ResolveAll.html
 
 #### License
 

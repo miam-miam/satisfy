@@ -1,5 +1,5 @@
 // Singletons are shared across threads, so a `!Send` type can't be one.
-use di::{Container, FromContainer};
+use satisfy::{Container, FromContainer};
 use std::rc::Rc;
 use std::sync::Arc;
 

@@ -15,8 +15,8 @@ help: the trait `Resolve<I, T>` is conditionally implemented for `&Container<TLi
   | |     TList::Out: IntoValue<T>,
   | |_________________------------^
   |                   |
-  |                   unsatisfied requirement introduced here: `<di::typed_list::Cons<Config, di::typed_list::Nil> as strategy::Locate<'_, Config, Here, &Container<di::typed_list::Cons<Config, di::typed_list::Nil>>>>::Out: strategy::IntoValue<Config>`
-  = note: required for `&Container<di::typed_list::Cons<Config, di::typed_list::Nil>>` to implement `Resolve<Here, Config>`
+  |                   unsatisfied requirement introduced here: `<satisfy::typed_list::Cons<Config, satisfy::typed_list::Nil> as strategy::Locate<'_, Config, Here, &Container<satisfy::typed_list::Cons<Config, satisfy::typed_list::Nil>>>>::Out: strategy::IntoValue<Config>`
+  = note: required for `&Container<satisfy::typed_list::Cons<Config, satisfy::typed_list::Nil>>` to implement `Resolve<Here, Config>`
 note: required by a bound in `Container::<TList>::resolve`
  --> src/container.rs
   |

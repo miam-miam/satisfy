@@ -1,5 +1,5 @@
 // Resolving a type that both the scope and its parent provide is ambiguous.
-use di::Container;
+use satisfy::Container;
 
 #[derive(Clone)]
 struct Port(#[allow(dead_code)] u16);

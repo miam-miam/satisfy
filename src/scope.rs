@@ -18,7 +18,7 @@ use crate::{Container, FromContainer, Resolve, ResolveAll, Shared};
 /// that scope only.
 ///
 /// ```
-/// # use di::{Container, FromContainer};
+/// # use satisfy::{Container, FromContainer};
 /// use std::sync::Arc;
 ///
 /// struct Pool {

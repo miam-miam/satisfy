@@ -1,5 +1,5 @@
 // `App` needs `Server`, which needs a `Port` that is never provided.
-use di::{Container, FromContainer, Resolve};
+use satisfy::{Container, FromContainer, Resolve};
 
 struct Port(#[allow(dead_code)] u16);
 

@@ -1,5 +1,5 @@
 // `Port` is provided and also has a default, so resolving it is ambiguous, even though it isn't `Clone`.
-use di::{Container, FromContainer};
+use satisfy::{Container, FromContainer};
 
 struct Port(#[allow(dead_code)] u16);
 impl<C> FromContainer<(), C> for Port {

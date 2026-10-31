@@ -4,17 +4,17 @@ error[E0277]: this container can't resolve `Arc<Cache>`
 14 |     let _: Arc<Cache> = Container::new().resolve();
    |                                          ^^^^^^^ `Arc<Cache>` can't be resolved here
    |
-   = help: the trait `strategy::Locate<'_, Arc<Cache>, _, &Container<di::typed_list::Nil>>` is not implemented for `di::typed_list::Nil`
-   = note: `Arc<Cache>` needs `.provide(..)`; a shared `Arc<X>` or `&X` can instead be built from `X`'s `FromContainer` impl if `X: Send + Sync`, or for a `dyn Trait`, from `di::dyn_default!(dyn Trait => Impl)`
+   = help: the trait `strategy::Locate<'_, Arc<Cache>, _, &Container<satisfy::typed_list::Nil>>` is not implemented for `satisfy::typed_list::Nil`
+   = note: `Arc<Cache>` needs `.provide(..)`; a shared `Arc<X>` or `&X` can instead be built from `X`'s `FromContainer` impl if `X: Send + Sync`, or for a `dyn Trait`, from `satisfy::dyn_default!(dyn Trait => Impl)`
    = note: if `Arc<Cache>` is provided, check no `FromContainer` impl pins it to a path like `Resolve<(), Arc<Cache>>`; keep `I` generic
-   = help: `di::typed_list::Nil` implements trait `strategy::Locate<'c, T, I, C>`:
+   = help: `satisfy::typed_list::Nil` implements trait `strategy::Locate<'c, T, I, C>`:
              strategy::Locate<'_, &T, SharedRef<I>, &Container<R>>
              strategy::Locate<'_, &T, SharedRef<I>, &Scoped<'_, Parent, TList>>
              strategy::Locate<'_, Arc<T>, SharedArc<I>, &Container<R>>
              strategy::Locate<'_, Arc<T>, SharedArc<I>, &Scoped<'_, Parent, TList>>
              strategy::Locate<'_, T, AutoBuild<I>, &Container<R>>
              strategy::Locate<'_, T, AutoBuild<I>, &Scoped<'_, Parent, TList>>
-   = note: required for `&Container<di::typed_list::Nil>` to implement `Resolve<_, Arc<Cache>>`
+   = note: required for `&Container<satisfy::typed_list::Nil>` to implement `Resolve<_, Arc<Cache>>`
 note: required by a bound in `Container::<TList>::resolve`
   --> src/container.rs
    |
