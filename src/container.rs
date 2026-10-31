@@ -17,7 +17,7 @@ use crate::{FromContainer, Resolve, ResolveAll, Shared};
 ///
 /// Give the container only the values that have no sensible default, such as configuration
 /// or external handles, with [`provide`](Self::provide). Every other type should implement
-/// [`FromContainer`], allowing it to be  built on demand with everything it depends on.
+/// [`FromContainer`], allowing it to be built on demand with everything it depends on.
 ///
 /// A container is usually built once at start-up.
 ///
@@ -48,6 +48,7 @@ use crate::{FromContainer, Resolve, ResolveAll, Shared};
 ///
 /// let container = Container::new().provide(GreeterConfig { greeting: "hello".into() });
 /// let greeter: Greeter = container.resolve();
+///
 /// assert_eq!(greeter.config.greeting, "hello");
 /// ```
 ///
@@ -75,7 +76,7 @@ use crate::{FromContainer, Resolve, ResolveAll, Shared};
 ///     url: String,
 /// }
 ///
-/// // Borrow from the container lifetime 'c
+/// // Borrow DbConfig from the container lifetime 'c
 /// impl<'c, I, C> FromContainer<I, C> for Pool
 /// where
 ///     C: Resolve<I, &'c DbConfig>,
@@ -88,19 +89,22 @@ use crate::{FromContainer, Resolve, ResolveAll, Shared};
 ///
 /// let container = Container::new().provide(DbConfig { url: "postgres://localhost".into() });
 /// let config: &DbConfig = container.resolve();
+///
 /// assert_eq!(config.url, "postgres://localhost");
 ///
 /// let a: Arc<Pool> = container.resolve();
 /// let b: Arc<Pool> = container.resolve();
 /// let c: &Pool = container.resolve();
+///
 /// assert!(Arc::ptr_eq(&a, &b));
 /// assert!(std::ptr::eq(c, &*a));
 /// ```
 ///
 /// # Writing code against any container
 ///
-/// The container's type grows with every [`provide`](Self::provide) (`Container<Cons<Config, Nil>>`), so
-/// rather than naming it, write code against `C: Resolve<I, T>` and pass `&container`.
+/// The container's type grows with every [`provide`](Self::provide) (`Container<Cons<Config, Nil>>`,
+/// see [`typed_list`](crate::typed_list)). It can be named, but it is usually simpler to write code
+/// against `C: Resolve<I, T>` and pass `&container`.
 /// Code that holds the container itself, such as an `Arc<C>` in shared state, can use the same
 /// bound for values that don't borrow from it.
 ///
@@ -133,9 +137,65 @@ use crate::{FromContainer, Resolve, ResolveAll, Shared};
 ///
 /// let prod = Container::new();
 /// let test = Container::new().override_with(Mailer { host: "localhost:1025".into() });
+///
 /// assert_eq!(mail_host(&prod), "smtp.example.com");
 /// assert_eq!(mail_host(&test), "localhost:1025");
 /// ```
+///
+/// To swap in a different type rather than a different value, make the dependent type generic over
+/// a trait. There is no `dyn` or `Arc`, and the fake needs no default; it is just provided.
+///
+/// ```
+/// # use satisfy::{Container, FromContainer, Resolve};
+/// trait PaymentGateway {
+///     fn charge(&self, pence: u32) -> bool;
+/// }
+///
+/// struct Stripe;
+/// impl PaymentGateway for Stripe {
+///     fn charge(&self, _: u32) -> bool {
+///         true
+///     }
+/// }
+///
+/// impl<C> FromContainer<(), C> for Stripe {
+///     fn from_container(_: C) -> Self {
+///         Stripe
+///     }
+/// }
+///
+/// #[derive(Clone)]
+/// struct AlwaysDecline;
+/// impl PaymentGateway for AlwaysDecline {
+///     fn charge(&self, _: u32) -> bool {
+///         false
+///     }
+/// }
+///
+/// struct Checkout<G> {
+///     gateway: G,
+/// }
+///
+/// impl<I, C, G> FromContainer<I, C> for Checkout<G>
+/// where
+///     G: PaymentGateway + 'static,
+///     C: Resolve<I, G>,
+/// {
+///     fn from_container(c: C) -> Self {
+///         Checkout { gateway: c.resolve() }
+///     }
+/// }
+///
+/// let live: Checkout<Stripe> = Container::new().resolve();
+/// let declined: Checkout<AlwaysDecline> = Container::new().provide(AlwaysDecline).resolve();
+///
+/// assert!(live.gateway.charge(1999));
+/// assert!(!declined.gateway.charge(1999));
+/// ```
+///
+/// The generic parameter spreads to every type that holds a `Checkout`. To avoid that, use
+/// [`dyn_default!`](crate::dyn_default) and resolve an `Arc<dyn PaymentGateway>` instead, at the
+/// cost of dynamic dispatch.
 ///
 /// # Scopes
 ///
@@ -190,14 +250,14 @@ impl<TList> Container<TList> {
     /// if you want to replace a [`FromContainer`] impl.
     ///
     /// ```
-    /// use satisfy::Container;
-    ///
+    /// # use satisfy::Container;
     /// #[derive(Clone)]
     /// struct Currency(&'static str);
     ///
     /// let c = Container::new().provide(Currency("EUR")).provide(2u8);
     /// let currency: Currency = c.resolve();
     /// let decimals: &u8 = c.resolve();
+    ///
     /// assert_eq!((currency.0, *decimals), ("EUR", 2));
     /// ```
     #[must_use]
@@ -220,8 +280,7 @@ impl<TList> Container<TList> {
     /// built from a clone too, unless [`override_singleton`](Self::override_singleton) sets it.
     ///
     /// ```
-    /// use satisfy::{Container, FromContainer};
-    ///
+    /// # use satisfy::{Container, FromContainer};
     /// #[derive(Clone)]
     /// struct TaxRate(f32);
     ///
@@ -233,6 +292,7 @@ impl<TList> Container<TList> {
     ///
     /// let exempt = Container::new().override_with(TaxRate(0.0));
     /// let rate: TaxRate = exempt.resolve();
+    ///
     /// assert_eq!(rate.0, 0.0);
     /// ```
     #[must_use]
@@ -256,10 +316,9 @@ impl<TList> Container<TList> {
     /// [`FromContainer`] impl.
     ///
     /// ```
-    /// use satisfy::{Container, FromContainer};
-    /// use std::sync::Arc;
-    /// use std::sync::atomic::{AtomicU64, Ordering};
-    ///
+    /// # use satisfy::{Container, FromContainer};
+    /// # use std::sync::Arc;
+    /// # use std::sync::atomic::{AtomicU64, Ordering};
     /// struct Counter(AtomicU64);
     ///
     /// impl<C> FromContainer<(), C> for Counter {
@@ -272,6 +331,7 @@ impl<TList> Container<TList> {
     /// let c = Container::new().override_singleton(seeded.clone());
     /// let counter: &Counter = c.resolve();
     /// counter.0.fetch_add(1, Ordering::Relaxed);
+    ///
     /// assert_eq!(seeded.0.load(Ordering::Relaxed), 101);
     /// ```
     #[must_use]
@@ -315,44 +375,47 @@ impl<TList> Container<TList> {
     /// [`Scoped::override_singleton`] which overrides the singleton used for that scope only.
     ///
     /// ```
-    /// # use satisfy::{Container, FromContainer, Resolve, ResolveAll};
+    /// # use satisfy::{Container, FromContainer, ResolveAll};
     /// # use std::sync::Arc;
-    /// struct Pool;
+    /// // Shared by every tenant, so built once in the parent.
+    /// struct FontCache;
     ///
-    /// impl<C> FromContainer<(), C> for Pool {
+    /// impl<C> FromContainer<(), C> for FontCache {
     ///     fn from_container(_: C) -> Self {
-    ///         Pool
+    ///         FontCache
     ///     }
     /// }
     ///
-    /// struct RequestId(u32);
-    ///
-    /// // Built per request, from a request-only value and the app's pool.
-    /// struct Handler {
-    ///     id: u32,
-    ///     pool: Arc<Pool>,
+    /// // Not `Clone`: borrowed from whichever scope provided it.
+    /// struct Tenant {
+    ///     name: String,
     /// }
     ///
-    /// impl<'c, I, C> FromContainer<I, C> for Handler
+    /// struct InvoiceRenderer {
+    ///     header: String,
+    ///     fonts: Arc<FontCache>,
+    /// }
+    ///
+    /// impl<'c, I, C> FromContainer<I, C> for InvoiceRenderer
     /// where
-    ///     C: ResolveAll<I, (&'c RequestId, Arc<Pool>)>,
+    ///     C: ResolveAll<I, (&'c Tenant, Arc<FontCache>)>,
     /// {
     ///     fn from_container(c: C) -> Self {
-    ///         let (id, pool) = c.resolve_all();
-    ///         Handler { id: id.0, pool }
+    ///         let (tenant, fonts) = c.resolve_all();
+    ///         InvoiceRenderer { header: format!("Invoice for {}", tenant.name), fonts }
     ///     }
     /// }
     ///
     /// let app = Container::new();
-    /// let first = app.scope().provide(RequestId(1));
-    /// let second = app.scope().provide(RequestId(2));
+    /// let acme = app.scope().provide(Tenant { name: "Acme".into() });
+    /// let globex = app.scope().provide(Tenant { name: "Globex".into() });
     ///
-    /// let a: Handler = first.resolve();
-    /// let b: Handler = second.resolve();
-    /// let app_pool: Arc<Pool> = app.resolve();
-    /// assert_eq!((a.id, b.id), (1, 2));
-    /// assert!(Arc::ptr_eq(&a.pool, &b.pool));
-    /// assert!(Arc::ptr_eq(&a.pool, &app_pool));
+    /// let for_acme: InvoiceRenderer = acme.resolve();
+    /// let for_globex: InvoiceRenderer = globex.resolve();
+    ///
+    /// assert_eq!(for_acme.header, "Invoice for Acme");
+    /// assert_eq!(for_globex.header, "Invoice for Globex");
+    /// assert!(Arc::ptr_eq(&for_acme.fonts, &for_globex.fonts));
     /// ```
     #[must_use]
     pub fn scope(&self) -> Scoped<'_, TList, ScopeEnd> {

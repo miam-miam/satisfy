@@ -1,3 +1,32 @@
+//! The types that record what a container holds, such as `Container<Cons<Config, Nil>>`.
+//!
+//! Name them to store a container in a struct field. Where possible prefer adding a bound using
+//! [`Resolve`](crate::Resolve) instead of writing the list out.
+//!
+//! Each [`provide`](crate::Container::provide) wraps the list in another `Cons`, so the most
+//! recently provided type comes first:
+//!
+//! ```
+//! # use satisfy::Container;
+//! # use satisfy::typed_list::{Cons, Nil};
+//! #[derive(Clone)]
+//! struct Region(&'static str);
+//!
+//! #[derive(Clone)]
+//! struct MaxUploadMb(u32);
+//!
+//! struct Uploader {
+//!     container: Container<Cons<MaxUploadMb, Cons<Region, Nil>>>,
+//! }
+//!
+//! let uploader = Uploader {
+//!     container: Container::new().provide(Region("eu-west")).provide(MaxUploadMb(25)),
+//! };
+//! let region: Region = uploader.container.resolve();
+//!
+//! assert_eq!(region.0, "eu-west");
+//! ```
+
 use std::fmt;
 
 /// A type-level linked list of the types provided to a container. Nil is the empty list.

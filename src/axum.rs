@@ -25,7 +25,8 @@
 //! The state can also be your own type holding the container, given
 //! `impl<C> FromRef<AppState<C>> for Arc<C>`.
 //!
-//! See `examples/axum` for a more complete example.
+//! See [`examples/axum`](https://github.com/miam-miam/satisfy/tree/main/examples/axum) for a more
+//! complete example.
 
 use crate::Resolve;
 use axum_core::extract::{FromRef, FromRequestParts};

@@ -8,7 +8,7 @@ use crate::strategy::{AutoBuild, InParent, IntoValue, Locate, SharedArc, SharedR
 use crate::typed_list::{Cons, Nil, ScopeEnd};
 use crate::{Container, FromContainer, Resolve, ResolveAll, Shared};
 
-/// A child of a [`Container`], made with [`Container::scope`], allowing request based overrides.
+/// A child of a [`Container`], made with [`Container::scope`], allowing request-based overrides.
 ///
 /// It resolves its own provided values and overrides first,
 /// before checking the parent's values.
@@ -35,14 +35,17 @@ use crate::{Container, FromContainer, Resolve, ResolveAll, Shared};
 ///
 /// let plain = container.scope();
 /// let from_plain: Arc<Pool> = plain.resolve();
+///
 /// assert!(Arc::ptr_eq(&from_plain, &shared));
 ///
 /// let replica = Arc::new(Pool { url: "postgres://replica".into() });
 /// let overridden = container.scope().override_singleton(replica.clone());
 /// let from_overridden: &Pool = overridden.resolve();
+///
 /// assert_eq!(from_overridden.url, "postgres://replica");
 ///
 /// let after: Arc<Pool> = container.resolve();
+///
 /// assert!(Arc::ptr_eq(&after, &shared));
 /// ```
 pub struct Scoped<'p, Parent, TList> {
@@ -67,7 +70,7 @@ impl<'p, Parent, TList> Scoped<'p, Parent, TList> {
     /// Adds `T` to the scope's type.
     ///
     /// `T` must not also be provided by the parent or have a
-    /// [`FromContainer`] impl as shadowing Parent's values is not supported.
+    /// [`FromContainer`] impl as shadowing parent values is not supported.
     ///
     /// Use [`override_with`](Self::override_with) to override a
     /// type that has a [`FromContainer`] impl.

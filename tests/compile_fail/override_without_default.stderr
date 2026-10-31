@@ -6,7 +6,7 @@ error[E0277]: `Port` has no default (`FromContainer` impl)
   |                              |
   |                              required by a bound introduced by this call
   |
-help: the trait `for<'c> FromContainer<_, &'c Container<satisfy::typed_list::Nil>>` is not implemented for `Port`
+help: the trait `for<'c> FromContainer<_, &'c Container<Nil>>` is not implemented for `Port`
  --> tests/compile_fail/override_without_default.rs:5:1
   |
 5 | struct Port(#[allow(dead_code)] u16);

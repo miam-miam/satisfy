@@ -42,6 +42,7 @@ pub struct InParent<I>(PhantomData<I>);
 /// # use satisfy::Container;
 /// let c = Container::new().provide(String::from("prod")).provide(8080u16);
 /// let label: String = c.resolve();
+///
 /// assert_eq!(label, "prod");
 /// ```
 pub struct Here;
@@ -57,6 +58,7 @@ pub struct Here;
 ///
 /// let c = Container::new().provide(Config { retries: 3 });
 /// let config: &Config = c.resolve();
+///
 /// assert_eq!(config.retries, 3);
 /// ```
 pub struct HereRef;
@@ -80,6 +82,7 @@ pub struct HereRef;
 ///
 /// let c = Container::new().provide(Arc::new(Postgres) as Arc<dyn Db>);
 /// let db: &dyn Db = c.resolve();
+///
 /// assert_eq!(db.name(), "pg");
 /// ```
 pub struct HereDeref;
@@ -104,12 +107,14 @@ pub struct HereDeref;
 ///
 /// let c = Container::new().provide(String::from("world"));
 /// let greeting: Greeting = c.resolve();
+///
 /// assert_eq!(greeting.0, "hello world");
 ///
 /// let c = Container::new()
 ///     .provide(String::from("world"))
 ///     .override_with(Greeting("hi".into()));
 /// let greeting: Greeting = c.resolve();
+///
 /// assert_eq!(greeting.0, "hi");
 /// ```
 pub struct AutoBuild<I>(PhantomData<I>);
@@ -130,9 +135,11 @@ pub struct AutoBuild<I>(PhantomData<I>);
 /// let c = Container::new();
 /// let a: Arc<Pool> = c.resolve();
 /// let b: Arc<Pool> = c.resolve();
+///
 /// assert!(Arc::ptr_eq(&a, &b));
 ///
 /// let other: Arc<Pool> = Container::new().resolve();
+///
 /// assert!(!Arc::ptr_eq(&a, &other));
 /// ```
 pub struct SharedArc<I>(PhantomData<I>);
@@ -142,20 +149,28 @@ pub struct SharedArc<I>(PhantomData<I>);
 /// ```
 /// # use satisfy::{Container, FromContainer};
 /// # use std::sync::Arc;
-/// struct Pool;
+/// use std::sync::atomic::{AtomicU32, Ordering};
 ///
-/// impl<C> FromContainer<(), C> for Pool {
+/// struct IdGenerator(AtomicU32);
+///
+/// impl IdGenerator {
+///     fn next(&self) -> u32 {
+///         self.0.fetch_add(1, Ordering::Relaxed)
+///     }
+/// }
+///
+/// impl<C> FromContainer<(), C> for IdGenerator {
 ///     fn from_container(_: C) -> Self {
-///         Pool
+///         IdGenerator(AtomicU32::new(1))
 ///     }
 /// }
 ///
 /// let c = Container::new();
-/// let borrowed: &Pool = c.resolve();
-/// let shared: Arc<Pool> = c.resolve();
-/// let again: &Pool = c.resolve();
-/// assert!(std::ptr::eq(borrowed, again));
-/// assert!(std::ptr::eq(borrowed, &*shared));
+/// let ids: &IdGenerator = c.resolve();
+/// let also_ids: Arc<IdGenerator> = c.resolve();
+///
+/// assert_eq!(ids.next(), 1);
+/// assert_eq!(also_ids.next(), 2);
 /// ```
 pub struct SharedRef<I>(PhantomData<I>);
 
@@ -163,7 +178,7 @@ pub struct SharedRef<I>(PhantomData<I>);
 #[diagnostic::on_unimplemented(
     message = "this container can't resolve `{T}`",
     label = "`{T}` can't be resolved here",
-    note = "`{T}` needs `.provide(..)`; a shared `Arc<X>` or `&X` can instead be built from `X`'s `FromContainer` impl if `X: Send + Sync`, or for a `dyn Trait`, from `satisfy::dyn_default!(dyn Trait => Impl)`",
+    note = "`{T}` needs `.provide(..)`; a shared `Arc<X>` or `&X` can instead be built from `X`'s `FromContainer` impl if `X: Send + Sync` and `X`'s own dependencies resolve (resolve `X` itself to find a missing one), or for a `dyn Trait`, from `satisfy::dyn_default!(dyn Trait => Impl)`",
     note = "if `{T}` is provided, check no `FromContainer` impl pins it to a path like `Resolve<(), {T}>`; keep `I` generic"
 )]
 pub(crate) trait Locate<'c, T, I, C> {
