@@ -4,36 +4,36 @@ error[E0277]: this container can't resolve `Port`
 15 |     let _: Server = Container::new().provide(Port(80)).resolve();
    |                                                        ^^^^^^^ `Port` can't be resolved here
    |
-   = help: the trait `strategy::Locate<'_, Port, (), &Container<satisfy::typed_list::Cons<Port, satisfy::typed_list::Nil>>>` is not implemented for `satisfy::typed_list::Cons<Port, satisfy::typed_list::Nil>`
-   = note: `Port` needs `.provide(..)`; a shared `Arc<X>` or `&X` can instead be built from `X`'s `FromContainer` impl if `X: Send + Sync`, or for a `dyn Trait`, from `satisfy::dyn_default!(dyn Trait => Impl)`
+   = help: the trait `strategy::Locate<'_, Port, (), &Container<Cons<Port, Nil>>>` is not implemented for `Cons<Port, Nil>`
+   = note: `Port` needs `.provide(..)`; a shared `Arc<X>` or `&X` can instead be built from `X`'s `FromContainer` impl if `X: Send + Sync` and `X`'s own dependencies resolve (resolve `X` itself to find a missing one), or for a `dyn Trait`, from `satisfy::dyn_default!(dyn Trait => Impl)`
    = note: if `Port` is provided, check no `FromContainer` impl pins it to a path like `Resolve<(), Port>`; keep `I` generic
 help: the following other types implement trait `strategy::Locate<'c, T, I, C>`
   --> src/strategy.rs
    |
    |   impl<'c, T: 'c, Tail, C> Locate<'c, T, Here, C> for Cons<T, Tail> {
-   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `satisfy::typed_list::Cons<T, Tail>` implements `strategy::Locate<'_, T, Here, C>`
+   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Cons<T, Tail>` implements `strategy::Locate<'_, T, Here, C>`
 ...
    |   impl<'c, T: 'c, Tail, C> Locate<'c, &'c T, HereRef, C> for Cons<T, Tail> {
-   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `satisfy::typed_list::Cons<T, Tail>` implements `strategy::Locate<'_, &T, HereRef, C>`
+   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Cons<T, Tail>` implements `strategy::Locate<'_, &T, HereRef, C>`
 ...
    |   impl<'c, T: ?Sized + 'c, Tail, C> Locate<'c, &'c T, HereDeref, C> for Cons<Arc<T>, Tail> {
-   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `satisfy::typed_list::Cons<Arc<T>, Tail>` implements `strategy::Locate<'_, &T, HereDeref, C>`
+   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Cons<Arc<T>, Tail>` implements `strategy::Locate<'_, &T, HereDeref, C>`
 ...
    | / impl<'c, T, H, Tail, I, C> Locate<'c, T, There<I>, C> for Cons<H, Tail>
    | | where
    | |     Tail: Locate<'c, T, I, C>,
-   | |______________________________^ `satisfy::typed_list::Cons<H, Tail>` implements `strategy::Locate<'_, T, There<I>, C>`
-   = note: required for `&Container<satisfy::typed_list::Cons<Port, satisfy::typed_list::Nil>>` to implement `Resolve<(), Port>`
-note: required for `Server` to implement `FromContainer<(), &Container<satisfy::typed_list::Cons<Port, satisfy::typed_list::Nil>>>`
+   | |______________________________^ `Cons<H, Tail>` implements `strategy::Locate<'_, T, There<I>, C>`
+   = note: required for `&Container<Cons<Port, Nil>>` to implement `Resolve<(), Port>`
+note: required for `Server` to implement `FromContainer<(), &Container<Cons<Port, Nil>>>`
   --> tests/compile_fail/pinned_index.rs:8:28
    |
  8 | impl<C: Resolve<(), Port>> FromContainer<(), C> for Server {
    |         -----------------  ^^^^^^^^^^^^^^^^^^^^     ^^^^^^
    |         |
    |         unsatisfied trait bound introduced here
-   = note: required for `satisfy::typed_list::Nil` to implement `strategy::Locate<'_, Server, AutoBuild<()>, &Container<satisfy::typed_list::Cons<Port, satisfy::typed_list::Nil>>>`
+   = note: required for `Nil` to implement `strategy::Locate<'_, Server, AutoBuild<()>, &Container<Cons<Port, Nil>>>`
    = note: 1 redundant requirement hidden
-   = note: required for `&Container<satisfy::typed_list::Cons<Port, satisfy::typed_list::Nil>>` to implement `Resolve<There<AutoBuild<()>>, Server>`
+   = note: required for `&Container<Cons<Port, Nil>>` to implement `Resolve<There<AutoBuild<()>>, Server>`
 note: required by a bound in `Container::<TList>::resolve`
   --> src/container.rs
    |

@@ -1,8 +1,9 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![warn(missing_docs)]
 
 #[doc = include_str!("../compile-errors.md")]
-pub mod guide_compile_errors {}
+pub mod _compile_errors {}
 
 #[cfg(feature = "axum")]
 pub mod axum;
@@ -10,7 +11,7 @@ mod container;
 mod once_map;
 mod scope;
 pub mod strategy;
-mod typed_list;
+pub mod typed_list;
 
 #[doc(inline)]
 pub use container::Container;
@@ -22,9 +23,78 @@ use std::sync::Arc;
 use strategy::{Skip, SkipPath};
 
 /// A default way to build `Self` from a container.
+///
 /// `I` is the resolution path of the dependencies (see [`strategy`]): keep it generic and pass it
 /// to the `Resolve` bound.
-// TODO: Document this
+///
+/// A type with no dependencies pins `I` to `()`. A type with dependencies stays generic over `I`
+/// and `C`, and lists what it needs as [`Resolve`] or [`ResolveAll`] bounds on `C`:
+///
+/// ```
+/// # use satisfy::{Container, FromContainer, ResolveAll};
+///
+/// #[derive(Clone)]
+/// struct ApiKey(String);
+///
+/// struct RetryPolicy {
+///     attempts: u8,
+/// }
+///
+/// impl<C> FromContainer<(), C> for RetryPolicy {
+///     fn from_container(_: C) -> Self {
+///         RetryPolicy { attempts: 3 }
+///     }
+/// }
+///
+/// struct WeatherClient {
+///     key: String,
+///     attempts: u8,
+/// }
+///
+/// impl<I, C> FromContainer<I, C> for WeatherClient
+/// where
+///     C: ResolveAll<I, (ApiKey, RetryPolicy)>,
+/// {
+///     fn from_container(c: C) -> Self {
+///         let (key, retry) = c.resolve_all();
+///         WeatherClient { key: key.0, attempts: retry.attempts }
+///     }
+/// }
+///
+/// // `ApiKey` has no default, so it must be provided; the rest are built on demand.
+/// let container = Container::new().provide(ApiKey("secret".into()));
+/// let client: WeatherClient = container.resolve();
+///
+/// assert_eq!(client.key, "secret");
+/// assert_eq!(client.attempts, 3);
+/// ```
+///
+/// To give a default to a type from another crate, wrap `I` in a local marker so the orphan rules
+/// allow the impl. If two crates do this for the same type, resolving it becomes ambiguous.
+///
+/// ```
+/// # use satisfy::{Container, FromContainer, Resolve};
+/// # use std::marker::PhantomData;
+/// # use std::path::PathBuf;
+/// struct Mine<I>(PhantomData<I>);
+///
+/// #[derive(Clone)]
+/// struct AppName(&'static str);
+///
+/// impl<I, C> FromContainer<Mine<I>, C> for PathBuf
+/// where
+///     C: Resolve<I, AppName>,
+/// {
+///     fn from_container(c: C) -> Self {
+///         let name: AppName = c.resolve();
+///         PathBuf::from("/var/lib").join(name.0)
+///     }
+/// }
+///
+/// let data_dir: PathBuf = Container::new().provide(AppName("notes")).resolve();
+///
+/// assert_eq!(data_dir, PathBuf::from("/var/lib/notes"));
+/// ```
 // `I` comes first so that a downstream crate can give a default to a
 // foreign type by using a local marker as `I` (orphan rules require a
 // local type before any uncovered type parameter such as `C`).
@@ -34,6 +104,7 @@ use strategy::{Skip, SkipPath};
     note = "`{Self}` needs `.provide(..)` or a `FromContainer` impl; `.override_with(..)` only replaces an existing default"
 )]
 pub trait FromContainer<I, C>: Sized + 'static {
+    /// Builds `Self`, resolving its dependencies from `c`.
     fn from_container(c: C) -> Self;
 }
 
@@ -86,7 +157,7 @@ where
     label = "`{T}` can't be resolved here",
     note = "`{T}` (or something it depends on) needs `.provide(..)`, or a `FromContainer` impl whose dependencies are all resolvable"
 )]
-pub trait Resolve<I, T> {
+pub trait Resolve<I, T>: sealed::Resolver {
     /// Resolves `T`, building it and its dependencies as needed.
     ///
     /// ```
@@ -117,6 +188,7 @@ pub trait Resolve<I, T> {
     /// }
     ///
     /// let container = Container::new().provide(Port(8080));
+    ///
     /// assert_eq!(port(&container), 8080);
     /// ```
     fn resolve(&self) -> T;
@@ -210,6 +282,7 @@ pub trait ResolveAll<I, T: sealed::Tuple>:
     /// let container = Container::new().provide(Port(8080));
     /// let server: Server = container.resolve();
     /// let pool: Arc<Pool> = container.resolve();
+    ///
     /// assert_eq!(server.port, 8080);
     /// assert!(Arc::ptr_eq(&server.pool, &pool));
     /// ```
@@ -217,6 +290,15 @@ pub trait ResolveAll<I, T: sealed::Tuple>:
 }
 
 mod sealed {
+    use crate::{Container, Scoped};
+
+    pub trait Resolver {}
+
+    impl<TList> Resolver for Container<TList> {}
+    impl<TList> Resolver for &Container<TList> {}
+    impl<Parent, TList> Resolver for Scoped<'_, Parent, TList> {}
+    impl<Parent, TList> Resolver for &Scoped<'_, Parent, TList> {}
+
     #[diagnostic::on_unimplemented(
         message = "`ResolveAll` takes a tuple of 2 to 12 dependencies, not `{Self}`",
         label = "not a tuple of 2 to 12 dependencies",
@@ -274,12 +356,12 @@ tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 
 tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5, T6 I6 E6 P6, T7 I7 E7 P7, T8 I8 E8 P8, T9 I9 E9 P9, T10 I10 E10 P10, T11 I11 E11 P11; E12 P12);
 tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5, T6 I6 E6 P6, T7 I7 E7 P7, T8 I8 E8 P8, T9 I9 E9 P9, T10 I10 E10 P10, T11 I11 E11 P11, T12 I12 E12 P12);
 
-/// Makes `Arc<dyn Trait>` and `&dyn Trait` resolve to the provided `Impl` singleton that implements [`FromContainer`].
+/// Makes `Arc<dyn Trait>` and `&dyn Trait` resolve to the singleton of `Impl`, built from its
+/// [`FromContainer`] impl.
 ///
 /// ```
-/// use satisfy::{Container, FromContainer};
-/// use std::sync::Arc;
-///
+/// # use satisfy::{Container, FromContainer};
+/// # use std::sync::Arc;
 /// trait Db: Send + Sync {}
 ///
 /// struct Postgres;
@@ -297,6 +379,7 @@ tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 
 /// let db: Arc<dyn Db> = c.resolve();
 /// let borrowed: &dyn Db = c.resolve();
 /// let pg: Arc<Postgres> = c.resolve();
+///
 /// assert!(std::ptr::addr_eq(&*db, borrowed));
 /// assert!(std::ptr::addr_eq(&*db, &*pg));
 /// ```
@@ -309,25 +392,37 @@ tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 
 /// ```
 /// # use satisfy::{Container, FromContainer};
 /// # use std::sync::Arc;
-/// # trait Db: Send + Sync {}
-/// # struct Postgres;
-/// # impl Db for Postgres {}
-/// # impl<C> FromContainer<(), C> for Postgres {
-/// #     fn from_container(_: C) -> Self {
-/// #         Postgres
-/// #     }
-/// # }
-/// satisfy::dyn_default!(dyn Db => Postgres);
+/// trait Dice: Send + Sync {
+///     fn roll(&self) -> u8;
+/// }
 ///
-/// struct Mock;
-/// impl Db for Mock {}
+/// struct FairDice;
+/// impl Dice for FairDice {
+///     fn roll(&self) -> u8 {
+///         4 // chosen by fair dice roll
+///     }
+/// }
 ///
-/// let mock: Arc<dyn Db> = Arc::new(Mock);
-/// let c = Container::new().override_singleton::<dyn Db, _>(mock.clone());
-/// let db: Arc<dyn Db> = c.resolve();
-/// let borrowed: &dyn Db = c.resolve();
-/// assert!(Arc::ptr_eq(&db, &mock));
-/// assert!(std::ptr::addr_eq(borrowed, &*mock));
+/// impl<C> FromContainer<(), C> for FairDice {
+///     fn from_container(_: C) -> Self {
+///         FairDice
+///     }
+/// }
+///
+/// satisfy::dyn_default!(dyn Dice => FairDice);
+///
+/// struct LoadedDice(u8);
+/// impl Dice for LoadedDice {
+///     fn roll(&self) -> u8 {
+///         self.0
+///     }
+/// }
+///
+/// let loaded: Arc<dyn Dice> = Arc::new(LoadedDice(6));
+/// let rigged = Container::new().override_singleton(loaded);
+/// let dice: &dyn Dice = rigged.resolve();
+///
+/// assert_eq!(dice.roll(), 6);
 /// ```
 #[macro_export]
 macro_rules! dyn_default {

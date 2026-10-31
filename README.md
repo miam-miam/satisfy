@@ -4,8 +4,8 @@ Satisfy
 [<img alt="crates.io" src="https://img.shields.io/badge/crates.io-fc8d62?style=for-the-badge&labelColor=555555&logo=rust" height="20">](https://crates.io/crates/satisfy)
 [<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-66c2a5?style=for-the-badge&labelColor=555555&logoColor=white&logo=data:image/svg+xml;base64,PHN2ZyByb2xlPSJpbWciIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgdmlld0JveD0iMCAwIDUxMiA1MTIiPjxwYXRoIGZpbGw9IiNmNWY1ZjUiIGQ9Ik00ODguNiAyNTAuMkwzOTIgMjE0VjEwNS41YzAtMTUtOS4zLTI4LjQtMjMuNC0zMy43bC0xMDAtMzcuNWMtOC4xLTMuMS0xNy4xLTMuMS0yNS4zIDBsLTEwMCAzNy41Yy0xNC4xIDUuMy0yMy40IDE4LjctMjMuNCAzMy43VjIxNGwtOTYuNiAzNi4yQzkuMyAyNTUuNSAwIDI2OC45IDAgMjgzLjlWMzk0YzAgMTMuNiA3LjcgMjYuMSAxOS45IDMyLjJsMTAwIDUwYzEwLjEgNS4xIDIyLjEgNS4xIDMyLjIgMGwxMDMuOS01MiAxMDMuOSA1MmMxMC4xIDUuMSAyMi4xIDUuMSAzMi4yIDBsMTAwLTUwYzEyLjItNi4xIDE5LjktMTguNiAxOS45LTMyLjJWMjgzLjljMC0xNS05LjMtMjguNC0yMy40LTMzLjd6TTM1OCAyMTQuOGwtODUgMzEuOXYtNjguMmw4NS0zN3Y3My4zek0xNTQgMTA0LjFsMTAyLTM4LjIgMTAyIDM4LjJ2LjZsLTEwMiA0MS40LTEwMi00MS40di0uNnptODQgMjkxLjFsLTg1IDQyLjV2LTc5LjFsODUtMzguOHY3NS40em0wLTExMmwtMTAyIDQxLjQtMTAyLTQxLjR2LS42bDEwMi0zOC4yIDEwMiAzOC4ydi42em0yNDAgMTEybC04NSA0Mi41di03OS4xbDg1LTM4Ljh2NzUuNHptMC0xMTJsLTEwMiA0MS40LTEwMi00MS40di0uNmwxMDItMzguMiAxMDIgMzguMnYuNnoiPjwvcGF0aD48L3N2Zz4K" height="20">](https://docs.rs/satisfy)
 
-Satisfy is a zero-dependency trait based dependency injection container whose dependency graph is checked at compile
-time. If a dependency is missing, or could come from two places, your code won't compile.
+Satisfy is a trait-based dependency injection library that checks your whole dependency graph at compile time, with no
+dependencies of its own. Forget to provide something and the build fails, no runtime checks or macros needed.
 
 You [`provide`] the values that have no sensible default, such as configuration. Other types implement the [
 `FromContainer`] trait and are built on demand from their dependencies.
@@ -17,8 +17,8 @@ You [`provide`] the values that have no sensible default, such as configuration.
 
 ## Examples
 
-The [examples](https://github.com/miam-miam/satisfy/tree/main/examples) directory has more complete programs.
-For axum, enable the `axum` feature to inject dependencies straight into handlers with [`satisfy::axum::Inject`].
+The [examples](https://github.com/miam-miam/satisfy/tree/main/examples) directory has more complete programs. For axum,
+enable the `axum` feature to inject dependencies straight into handlers with [`satisfy::axum::Inject`].
 
 [`satisfy::axum::Inject`]: https://docs.rs/satisfy/latest/satisfy/axum/struct.Inject.html
 
@@ -35,6 +35,7 @@ struct Pool {
     url: String,
 }
 
+// Implement `FromContainer` to build a `Pool` from a `Config`.
 impl<I, C> FromContainer<I, C> for Pool
 where
     C: Resolve<I, Config>
@@ -49,7 +50,7 @@ struct UserRepo {
     pool: Arc<Pool>,
 }
 
-// Arcs are singletons, built once per container. Each `UserRepo` gets a clone of the same Arc.
+// Arcs are singletons, built once per container. Each `UserRepo` gets a clone of the same Arc<Pool>.
 impl<I, C> FromContainer<I, C> for UserRepo
 where
     C: Resolve<I, Arc<Pool>>
@@ -73,7 +74,7 @@ The type you ask for determines what you get:
 
 - `T`: built fresh on each call, or a clone of the provided value.
 - `&T`: a borrow of the provided value or of the Arc singleton.
-- `Arc<T>`: the singleton, built once per container.
+- `Arc<T>`: a singleton, built once per container.
 
 Without the `provide(Config { .. })` call, this fails to compile:
 
@@ -83,13 +84,18 @@ error[E0277]: this container can't resolve `Arc<Pool>`
 
 The [compile errors guide] explains the less obvious errors.
 
-[compile errors guide]: https://docs.rs/satisfy/latest/satisfy/guide_compile_errors/index.html
+[compile errors guide]: https://docs.rs/satisfy/latest/satisfy/_compile_errors/index.html
 
 ### Overrides
 
-[`override_with`] replaces a type's default with a fixed value, such as a mock in tests. [`override_singleton`]
-replaces only the singleton behind `Arc<T>` and `&T`. It doesn't need `Clone`, so it also works for a `dyn Trait` given
-a default with [`dyn_default!`].
+[`override_with`] replaces a type's default with a fixed value, such as a mock in tests.
+
+[`override_singleton`] replaces only the singleton behind `Arc<T>` and `&T`. It doesn't need `Clone`, so it also works
+for a `dyn Trait` defaulted with [`dyn_default!`].
+
+To swap one implementation type for another without `dyn`, make the dependent type generic over a trait. The
+[`Container` docs](https://docs.rs/satisfy/latest/satisfy/struct.Container.html#overriding-defaults-in-tests) show
+how, and the trade-off against `dyn_default!`.
 
 ```rust
 use satisfy::{Container, FromContainer};
@@ -122,10 +128,12 @@ impl Mailer for Fake {
 }
 
 let prod = Container::new();
-let test = Container::new().override_singleton::<dyn Mailer, _ > (Arc::new(Fake));
+let fake: Arc<dyn Mailer> = Arc::new(Fake);
+let test = Container::new().override_singleton(fake);
 
 let mailer: Arc<dyn Mailer> = prod.resolve();
 assert_eq!(mailer.host(), "smtp.example.com");
+
 let mailer: Arc<dyn Mailer> = test.resolve();
 assert_eq!(mailer.host(), "localhost");
 ```
@@ -174,6 +182,7 @@ let app = Container::new();
 
 let first: Handler = app.scope().provide(RequestId(1)).resolve();
 let second: Handler = app.scope().provide(RequestId(2)).resolve();
+
 assert_eq!((first.id.0, second.id.0), (1, 2));
 assert!(Arc::ptr_eq(&first.pool, &second.pool));
 ```

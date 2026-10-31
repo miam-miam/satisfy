@@ -25,12 +25,14 @@
 //! The state can also be your own type holding the container, given
 //! `impl<C> FromRef<AppState<C>> for Arc<C>`.
 //!
-//! See `examples/axum` for a more complete example.
+//! See [`examples/axum`](https://github.com/miam-miam/satisfy/tree/main/examples/axum) for a more
+//! complete example.
 
 use crate::Resolve;
 use axum_core::extract::{FromRef, FromRequestParts};
 use http::request::Parts;
 use std::convert::Infallible;
+use std::fmt;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -45,10 +47,26 @@ use std::sync::Arc;
 pub struct Inject<T, I>(pub T, pub PhantomData<fn() -> I>);
 
 impl<T, I> Inject<T, I> {
+    /// Returns the resolved value.
     pub fn into_inner(self) -> T {
         self.0
     }
 }
+
+// Written by hand because derives would also require `I: Debug` / `I: Clone`.
+impl<T: fmt::Debug, I> fmt::Debug for Inject<T, I> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Inject").field(&self.0).finish()
+    }
+}
+
+impl<T: Clone, I> Clone for Inject<T, I> {
+    fn clone(&self) -> Self {
+        Inject(self.0.clone(), PhantomData)
+    }
+}
+
+impl<T: Copy, I> Copy for Inject<T, I> {}
 
 // `I` is `(C, P)` so that the impl can name the container type `C`; `P` is its resolution path.
 impl<S, C, P, T> FromRequestParts<S> for Inject<T, (C, P)>

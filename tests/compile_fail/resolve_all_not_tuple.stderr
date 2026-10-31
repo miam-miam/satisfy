@@ -23,7 +23,7 @@ error[E0277]: this container can't resolve every element of `u32`
 6 |     let _: u32 = c.resolve_all();
   |                    ^^^^^^^^^^^ an element of `u32` can't be resolved here
   |
-  = help: the trait `ResolveAll<_, u32>` is not implemented for `&Container<satisfy::typed_list::Cons<u32, satisfy::typed_list::Nil>>`
+  = help: the trait `ResolveAll<_, u32>` is not implemented for `&Container<Cons<u32, Nil>>`
   = note: each element (or something it depends on) needs `.provide(..)`, or a `FromContainer` impl whose dependencies are all resolvable
 note: required by a bound in `Container::<TList>::resolve_all`
  --> src/container.rs
@@ -60,7 +60,7 @@ error[E0277]: this container can't resolve every element of `(u32,)`
 7 |     let _: (u32,) = c.resolve_all();
   |                       ^^^^^^^^^^^ an element of `(u32,)` can't be resolved here
   |
-  = help: the trait `ResolveAll<_, (u32,)>` is not implemented for `&Container<satisfy::typed_list::Cons<u32, satisfy::typed_list::Nil>>`
+  = help: the trait `ResolveAll<_, (u32,)>` is not implemented for `&Container<Cons<u32, Nil>>`
   = note: each element (or something it depends on) needs `.provide(..)`, or a `FromContainer` impl whose dependencies are all resolvable
 note: required by a bound in `Container::<TList>::resolve_all`
  --> src/container.rs

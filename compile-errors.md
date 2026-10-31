@@ -23,10 +23,12 @@ This can be caused by:
 This appears for shared instances (singletons). Check the following in order:
 
 1. `X` has a `FromContainer` impl, or was provided.
-2. `X` is `Send + Sync`. Singletons are shared across threads, so a type holding an `Rc` or `Cell`
+2. Every dependency of `X` can be resolved. The error stops at `Arc<X>` instead of naming the missing dependency, so
+   add a temporary `let _: X = container.resolve();`: its error names the type that's missing.
+3. `X` is `Send + Sync`. Singletons are shared across threads, so a type holding an `Rc` or `Cell`
    can't be one.
-3. For `Arc<dyn Trait>`, the trait has a `satisfy::dyn_default!(dyn Trait => Impl)`.
-4. No `FromContainer` impl pins the path (see below).
+4. For `Arc<dyn Trait>`, the trait has a `satisfy::dyn_default!(dyn Trait => Impl)`.
+5. No `FromContainer` impl pins the path (see below).
 
 ## `can't resolve Port` when `Port` is provided
 
@@ -53,6 +55,7 @@ where
 
 Resolving `App` can fail with "`Port` has no default". The error names the type at the bottom of the chain that is
 missing, not the one you asked for. The `required for ...` notes underneath trace the path from `App` down to `Port`.
+The trace stops early at a shared `Arc<X>` or `&X`; see [above](#this-container-cant-resolve-arcx-or-x).
 
 ## `has no default` from `override_with`
 

@@ -4,13 +4,13 @@ error[E0283]: type annotations needed
 13 |     let _: Port = c.resolve();
    |                     ^^^^^^^ cannot infer type of the type parameter `I` declared on the method `resolve`
    |
-   = note: multiple `impl`s satisfying `satisfy::typed_list::Cons<Port, satisfy::typed_list::Nil>: strategy::Locate<'_, Port, _, &Container<satisfy::typed_list::Cons<Port, satisfy::typed_list::Nil>>>` found in the `satisfy` crate:
-           - impl<'c, T, H, Tail, I, C> strategy::Locate<'c, T, There<I>, C> for satisfy::typed_list::Cons<H, Tail>
+   = note: multiple `impl`s satisfying `Cons<Port, Nil>: strategy::Locate<'_, Port, _, &Container<Cons<Port, Nil>>>` found in the `satisfy` crate:
+           - impl<'c, T, H, Tail, I, C> strategy::Locate<'c, T, There<I>, C> for Cons<H, Tail>
              where Tail: strategy::Locate<'c, T, I, C>;
-           - impl<'c, T, Tail, C> strategy::Locate<'c, T, Here, C> for satisfy::typed_list::Cons<T, Tail>
+           - impl<'c, T, Tail, C> strategy::Locate<'c, T, Here, C> for Cons<T, Tail>
              where T: 'c;
-   = note: cannot satisfy `<satisfy::typed_list::Cons<Port, satisfy::typed_list::Nil> as strategy::Locate<'_, Port, _, &Container<satisfy::typed_list::Cons<Port, satisfy::typed_list::Nil>>>>::Out == _`
-   = note: required for `&Container<satisfy::typed_list::Cons<Port, satisfy::typed_list::Nil>>` to implement `Resolve<_, Port>`
+   = note: cannot satisfy `<Cons<Port, Nil> as strategy::Locate<'_, Port, _, &Container<Cons<Port, Nil>>>>::Out == _`
+   = note: required for `&Container<Cons<Port, Nil>>` to implement `Resolve<_, Port>`
 note: required by a bound in `Container::<TList>::resolve`
   --> src/container.rs
    |
@@ -19,7 +19,7 @@ note: required by a bound in `Container::<TList>::resolve`
    |     where
    |         &'c Self: Resolve<I, T>,
    |                   ^^^^^^^^^^^^^ required by this bound in `Container::<TList>::resolve`
-   = note: required for `&Container<satisfy::typed_list::Cons<Port, satisfy::typed_list::Nil>>` to implement `Resolve<_, Port>`
+   = note: required for `&Container<Cons<Port, Nil>>` to implement `Resolve<_, Port>`
 note: required by a bound in `Container::<TList>::resolve`
   --> src/container.rs
    |
