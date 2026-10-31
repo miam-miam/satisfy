@@ -23,8 +23,6 @@ help: the trait `Resolve<I, T>` is conditionally implemented for `&Scoped<'_, Pa
    |                   unsatisfied requirement introduced here: `<satisfy::typed_list::ScopeEnd as strategy::Locate<'_, Port, InParent<AutoBuild<_>>, &Scoped<'_, satisfy::typed_list::Nil, satisfy::typed_list::ScopeEnd>>>::Out: strategy::IntoValue<Port>`
    |                   unsatisfied requirement introduced here: `<satisfy::typed_list::ScopeEnd as strategy::Locate<'_, Port, InParent<AutoBuild<_>>, &Scoped<'_, satisfy::typed_list::Nil, satisfy::typed_list::ScopeEnd>>>::Out: strategy::IntoValue<Port>`
    = note: required for `satisfy::typed_list::Nil` to implement `strategy::Locate<'_, Port, AutoBuild<_>, &Scoped<'_, satisfy::typed_list::Nil, satisfy::typed_list::ScopeEnd>>`
-   = note: 1 redundant requirement hidden
-   = note: required for `satisfy::typed_list::ScopeEnd` to implement `strategy::Locate<'_, Port, InParent<AutoBuild<_>>, &Scoped<'_, satisfy::typed_list::Nil, satisfy::typed_list::ScopeEnd>>`
    = note: required for `&Scoped<'_, satisfy::typed_list::Nil, satisfy::typed_list::ScopeEnd>` to implement `Resolve<InParent<AutoBuild<_>>, Port>`
 note: required by a bound in `Scoped::<'p, Parent, TList>::resolve`
   --> src/scope.rs

@@ -1,8 +1,11 @@
 #![doc = include_str!("../README.md")]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[doc = include_str!("../compile-errors.md")]
 pub mod guide_compile_errors {}
 
+#[cfg(feature = "axum")]
+pub mod axum;
 mod container;
 mod once_map;
 mod scope;
@@ -16,6 +19,7 @@ pub use container::Container;
 pub use scope::Scoped;
 
 use std::sync::Arc;
+use strategy::{Skip, SkipPath};
 
 /// A default way to build `Self` from a container.
 /// `I` is the resolution path of the dependencies (see [`strategy`]): keep it generic and pass it
@@ -83,6 +87,38 @@ where
     note = "`{T}` (or something it depends on) needs `.provide(..)`, or a `FromContainer` impl whose dependencies are all resolvable"
 )]
 pub trait Resolve<I, T> {
+    /// Resolves `T`, building it and its dependencies as needed.
+    ///
+    /// ```
+    /// # use satisfy::{Container, FromContainer, Resolve};
+    /// #[derive(Clone)]
+    /// struct Port(u16);
+    ///
+    /// struct Server {
+    ///     port: u16,
+    /// }
+    ///
+    /// impl<I, C> FromContainer<I, C> for Server
+    /// where
+    ///     C: Resolve<I, Port>,
+    /// {
+    ///     fn from_container(c: C) -> Self {
+    ///         let port: Port = c.resolve();
+    ///         Server { port: port.0 }
+    ///     }
+    /// }
+    ///
+    /// fn port<C, I>(c: C) -> u16
+    /// where
+    ///     C: Resolve<I, Server>,
+    /// {
+    ///     let server: Server = c.resolve();
+    ///     server.port
+    /// }
+    ///
+    /// let container = Container::new().provide(Port(8080));
+    /// assert_eq!(port(&container), 8080);
+    /// ```
     fn resolve(&self) -> T;
 }
 
@@ -91,13 +127,92 @@ pub trait Resolve<I, T> {
 /// Written as its own trait rather than a
 /// [`Resolve`] impl so the elements may borrow from the container. For one dependency, use [`Resolve`].
 /// `I` is a tuple of the elements' resolution paths, inferred (see [`strategy`] for more details).
-// Matches `Tuple`'s message, as both bounds fail together for a non-tuple.
+///
+/// A `C: ResolveAll<I, (A, B)>` bound also implies `C: Resolve<_, A>` and `C: Resolve<_, B>`, so
+/// generic code can hand the elements to code that needs them one at a time with a single `I`.
+// Also shown when an element is missing, so it can't claim `T` isn't a tuple; `Tuple`'s own
+// message covers that case.
 #[diagnostic::on_unimplemented(
-    message = "`ResolveAll` takes a tuple of 2 to 12 dependencies, not `{T}`",
-    label = "not a tuple of 2 to 12 dependencies",
-    note = "to resolve a single dependency, use `Resolve` (`.resolve()`) instead"
+    message = "this container can't resolve every element of `{T}`",
+    label = "an element of `{T}` can't be resolved here",
+    note = "each element (or something it depends on) needs `.provide(..)`, or a `FromContainer` impl whose dependencies are all resolvable"
 )]
-pub trait ResolveAll<I, T: sealed::Tuple> {
+pub trait ResolveAll<I, T: sealed::Tuple>:
+    Resolve<Self::P1, T::E1>
+    + Resolve<Self::P2, T::E2>
+    + Resolve<Self::P3, T::E3>
+    + Resolve<Self::P4, T::E4>
+    + Resolve<Self::P5, T::E5>
+    + Resolve<Self::P6, T::E6>
+    + Resolve<Self::P7, T::E7>
+    + Resolve<Self::P8, T::E8>
+    + Resolve<Self::P9, T::E9>
+    + Resolve<Self::P10, T::E10>
+    + Resolve<Self::P11, T::E11>
+    + Resolve<Self::P12, T::E12>
+{
+    #[doc(hidden)]
+    type P1;
+    #[doc(hidden)]
+    type P2;
+    #[doc(hidden)]
+    type P3;
+    #[doc(hidden)]
+    type P4;
+    #[doc(hidden)]
+    type P5;
+    #[doc(hidden)]
+    type P6;
+    #[doc(hidden)]
+    type P7;
+    #[doc(hidden)]
+    type P8;
+    #[doc(hidden)]
+    type P9;
+    #[doc(hidden)]
+    type P10;
+    #[doc(hidden)]
+    type P11;
+    #[doc(hidden)]
+    type P12;
+
+    /// Resolves every element of `T`, building each one and its dependencies as needed.
+    ///
+    /// ```
+    /// # use satisfy::{Container, FromContainer, Resolve, ResolveAll};
+    /// # use std::sync::Arc;
+    /// #[derive(Clone)]
+    /// struct Port(u16);
+    ///
+    /// struct Pool;
+    ///
+    /// impl<C> FromContainer<(), C> for Pool {
+    ///     fn from_container(_: C) -> Self {
+    ///         Pool
+    ///     }
+    /// }
+    ///
+    /// struct Server {
+    ///     port: u16,
+    ///     pool: Arc<Pool>,
+    /// }
+    ///
+    /// impl<I, C> FromContainer<I, C> for Server
+    /// where
+    ///     C: ResolveAll<I, (Port, Arc<Pool>)>,
+    /// {
+    ///     fn from_container(c: C) -> Self {
+    ///         let (port, pool) = c.resolve_all();
+    ///         Server { port: port.0, pool }
+    ///     }
+    /// }
+    ///
+    /// let container = Container::new().provide(Port(8080));
+    /// let server: Server = container.resolve();
+    /// let pool: Arc<Pool> = container.resolve();
+    /// assert_eq!(server.port, 8080);
+    /// assert!(Arc::ptr_eq(&server.pool, &pool));
+    /// ```
     fn resolve_all(&self) -> T;
 }
 
@@ -107,17 +222,39 @@ mod sealed {
         label = "not a tuple of 2 to 12 dependencies",
         note = "to resolve a single dependency, use `Resolve` (`.resolve()`) instead"
     )]
-    pub trait Tuple {}
+    pub trait Tuple {
+        type E1;
+        type E2;
+        type E3;
+        type E4;
+        type E5;
+        type E6;
+        type E7;
+        type E8;
+        type E9;
+        type E10;
+        type E11;
+        type E12;
+    }
 }
 
+// Each impl names the slots it fills (`T I E P`) and the unused slots (`E P`), which resolve
+// `Skip` so that every `ResolveAll` supertrait holds.
 macro_rules! tuple_resolve_all {
-    ($($t:ident $i:ident),+) => {
-        impl<$($t),+> sealed::Tuple for ($($t,)+) {}
+    ($($t:ident $i:ident $e:ident $p:ident),+ $(; $($pe:ident $pp:ident),+)?) => {
+        impl<$($t),+> sealed::Tuple for ($($t,)+) {
+            $(type $e = $t;)+
+            $($(type $pe = Skip;)+)?
+        }
 
         impl<C, $($t, $i),+> ResolveAll<($($i,)+), ($($t,)+)> for C
         where
-            $(C: Resolve<$i, $t>),+
+            $(C: Resolve<$i, $t>,)+
+            C: Resolve<SkipPath, Skip>,
         {
+            $(type $p = $i;)+
+            $($(type $pp = SkipPath;)+)?
+
             fn resolve_all(&self) -> ($($t,)+) {
                 ($(<C as Resolve<$i, $t>>::resolve(self),)+)
             }
@@ -125,17 +262,17 @@ macro_rules! tuple_resolve_all {
     };
 }
 
-tuple_resolve_all!(T1 I1, T2 I2);
-tuple_resolve_all!(T1 I1, T2 I2, T3 I3);
-tuple_resolve_all!(T1 I1, T2 I2, T3 I3, T4 I4);
-tuple_resolve_all!(T1 I1, T2 I2, T3 I3, T4 I4, T5 I5);
-tuple_resolve_all!(T1 I1, T2 I2, T3 I3, T4 I4, T5 I5, T6 I6);
-tuple_resolve_all!(T1 I1, T2 I2, T3 I3, T4 I4, T5 I5, T6 I6, T7 I7);
-tuple_resolve_all!(T1 I1, T2 I2, T3 I3, T4 I4, T5 I5, T6 I6, T7 I7, T8 I8);
-tuple_resolve_all!(T1 I1, T2 I2, T3 I3, T4 I4, T5 I5, T6 I6, T7 I7, T8 I8, T9 I9);
-tuple_resolve_all!(T1 I1, T2 I2, T3 I3, T4 I4, T5 I5, T6 I6, T7 I7, T8 I8, T9 I9, T10 I10);
-tuple_resolve_all!(T1 I1, T2 I2, T3 I3, T4 I4, T5 I5, T6 I6, T7 I7, T8 I8, T9 I9, T10 I10, T11 I11);
-tuple_resolve_all!(T1 I1, T2 I2, T3 I3, T4 I4, T5 I5, T6 I6, T7 I7, T8 I8, T9 I9, T10 I10, T11 I11, T12 I12);
+tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2; E3 P3, E4 P4, E5 P5, E6 P6, E7 P7, E8 P8, E9 P9, E10 P10, E11 P11, E12 P12);
+tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3; E4 P4, E5 P5, E6 P6, E7 P7, E8 P8, E9 P9, E10 P10, E11 P11, E12 P12);
+tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4; E5 P5, E6 P6, E7 P7, E8 P8, E9 P9, E10 P10, E11 P11, E12 P12);
+tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5; E6 P6, E7 P7, E8 P8, E9 P9, E10 P10, E11 P11, E12 P12);
+tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5, T6 I6 E6 P6; E7 P7, E8 P8, E9 P9, E10 P10, E11 P11, E12 P12);
+tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5, T6 I6 E6 P6, T7 I7 E7 P7; E8 P8, E9 P9, E10 P10, E11 P11, E12 P12);
+tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5, T6 I6 E6 P6, T7 I7 E7 P7, T8 I8 E8 P8; E9 P9, E10 P10, E11 P11, E12 P12);
+tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5, T6 I6 E6 P6, T7 I7 E7 P7, T8 I8 E8 P8, T9 I9 E9 P9; E10 P10, E11 P11, E12 P12);
+tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5, T6 I6 E6 P6, T7 I7 E7 P7, T8 I8 E8 P8, T9 I9 E9 P9, T10 I10 E10 P10; E11 P11, E12 P12);
+tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5, T6 I6 E6 P6, T7 I7 E7 P7, T8 I8 E8 P8, T9 I9 E9 P9, T10 I10 E10 P10, T11 I11 E11 P11; E12 P12);
+tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5, T6 I6 E6 P6, T7 I7 E7 P7, T8 I8 E8 P8, T9 I9 E9 P9, T10 I10 E10 P10, T11 I11 E11 P11, T12 I12 E12 P12);
 
 /// Makes `Arc<dyn Trait>` and `&dyn Trait` resolve to the provided `Impl` singleton that implements [`FromContainer`].
 ///

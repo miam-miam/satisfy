@@ -1,5 +1,5 @@
 [workspace]
-members = ["."]
+members = [".", "examples/axum"]
 
 [package]
 name = "satisfy"
@@ -9,6 +9,11 @@ rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+axum-core = { version = "0.5", optional = true }
+http = { version = "1", optional = true }
+
+[features]
+axum = ["dep:axum-core", "dep:http"]
 
 [dev-dependencies]
 trybuild = "1"
@@ -17,3 +22,7 @@ trybuild = "1"
 [[example]]
 name = "testing"
 test = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

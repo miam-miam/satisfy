@@ -66,8 +66,7 @@ pub struct HereRef;
 ///
 /// ```
 /// # use satisfy::Container;
-/// use std::sync::Arc;
-///
+/// # use std::sync::Arc;
 /// trait Db: Send + Sync {
 ///     fn name(&self) -> &str;
 /// }
@@ -268,5 +267,21 @@ where
 
     fn locate(&'c self, c: &'c Container<R>) -> &'c T {
         c.singleton::<T, I>()
+    }
+}
+
+/// Fills the unused slots of a [`ResolveAll`](crate::ResolveAll) tuple. Always resolvable.
+#[doc(hidden)]
+pub struct Skip;
+
+/// The path to [`Skip`].
+#[doc(hidden)]
+pub struct SkipPath;
+
+impl<'c, L, C> Locate<'c, Skip, SkipPath, C> for L {
+    type Out = Skip;
+
+    fn locate(&'c self, _: C) -> Skip {
+        Skip
     }
 }

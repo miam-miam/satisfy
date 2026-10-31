@@ -18,6 +18,9 @@ You [`provide`] the values that have no sensible default, such as configuration.
 ## Examples
 
 The [examples](https://github.com/miam-miam/satisfy/tree/main/examples) directory has more complete programs.
+For axum, enable the `axum` feature to inject dependencies straight into handlers with [`satisfy::axum::Inject`].
+
+[`satisfy::axum::Inject`]: https://docs.rs/satisfy/latest/satisfy/axum/struct.Inject.html
 
 ```rust
 use satisfy::{Container, FromContainer, Resolve};
@@ -178,7 +181,7 @@ assert!(Arc::ptr_eq(&first.pool, &second.pool));
 [`scope`]: https://docs.rs/satisfy/latest/satisfy/struct.Container.html#method.scope
 [`ResolveAll`]: https://docs.rs/satisfy/latest/satisfy/trait.ResolveAll.html
 
-#### License
+#### Licence
 
 <sup>
 Licensed under either of <a href="https://github.com/miam-miam/satisfy/blob/main/LICENSE-APACHE">Apache License, Version
