@@ -64,3 +64,26 @@ fn resolve_all_bound_lets_generic_code_resolve_each_element() {
     let (name, _) = hand_off(&&app);
     assert_eq!(name, "hi");
 }
+
+fn users_and_config<C, J>(c: &C) -> (String, String)
+where
+    C: ResolveAll<J, (Users, Config)>,
+{
+    let (users, config) = c.resolve_all();
+    (users.0, config.0)
+}
+
+fn hand_off_subset<C, I>(c: &C) -> (String, String)
+where
+    C: ResolveAll<I, (Users, Stats, Config)>,
+{
+    users_and_config(c)
+}
+
+#[test]
+fn resolve_all_bound_implies_resolve_all_of_a_subset() {
+    let app = Container::new().provide(Config("hi".into()));
+
+    let (name, config) = hand_off_subset(&&app);
+    assert_eq!((name.as_str(), config.as_str()), ("hi", "hi"));
+}
