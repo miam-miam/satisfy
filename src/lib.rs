@@ -202,6 +202,8 @@ pub trait Resolve<I, T>: sealed::Resolver {
 ///
 /// A `C: ResolveAll<I, (A, B)>` bound also implies `C: Resolve<_, A>` and `C: Resolve<_, B>`, so
 /// generic code can hand the elements to code that needs them one at a time with a single `I`.
+/// It also implies `ResolveAll` of any 2 or more of those elements, in any order, so
+/// `ResolveAll<I, (A, B, C, D)>` covers a call needing `ResolveAll<_, (B, D)>`.
 // Also shown when an element is missing, so it can't claim `T` isn't a tuple; `Tuple`'s own
 // message covers that case.
 #[diagnostic::on_unimplemented(
@@ -222,6 +224,7 @@ pub trait ResolveAll<I, T: sealed::Tuple>:
     + Resolve<Self::P10, T::E10>
     + Resolve<Self::P11, T::E11>
     + Resolve<Self::P12, T::E12>
+    + Resolve<SkipPath, Skip>
 {
     #[doc(hidden)]
     type P1;
