@@ -1,0 +1,22 @@
+error[E0277]: `Cache` fails with `CacheErr`, not the `DbErr` of the rest of this `try_resolve_all` tuple
+  --> tests/compile_fail/try_resolve_all_mixed_errors.rs:26:30
+   |
+26 |     let _ = Container::new().try_resolve_all::<(Db, Cache), _>();
+   |                              ^^^^^^^^^^^^^^^ `Cache` doesn't fail with `DbErr`
+   |
+help: the trait `satisfy::strategy::SameError<Cache, DbErr>` is not implemented for `CacheErr`
+  --> tests/compile_fail/try_resolve_all_mixed_errors.rs:5:1
+   |
+ 5 | struct CacheErr;
+   | ^^^^^^^^^^^^^^^
+   = note: every fallible element of a `try_resolve_all` tuple must have the same `Error`; resolve `Cache` with a separate `try_resolve`
+   = note: required for `&Container<Nil>` to implement `satisfy::TryResolveIn<Fallible<TryAutoBuild<()>>, Cache, DbErr>`
+   = note: required for `&Container<Nil>` to implement `TryResolveAll<(Fallible<TryAutoBuild<()>>, Fallible<TryAutoBuild<()>>, DbErr), (Db, Cache)>`
+note: required by a bound in `Container::<TList>::try_resolve_all`
+  --> src/container.rs
+   |
+   |     pub fn try_resolve_all<'c, T, I>(
+   |            --------------- required by a bound in this associated function
+...
+   |         &'c Self: TryResolveAll<I, T>,
+   |                   ^^^^^^^^^^^^^^^^^^^ required by this bound in `Container::<TList>::try_resolve_all`

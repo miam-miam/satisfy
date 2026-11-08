@@ -1,0 +1,26 @@
+error[E0277]: this container can't try to resolve `Repo`
+  --> tests/compile_fail/try_missing_transitive.rs:29:51
+   |
+29 |     let _: Result<Repo, DbErr> = Container::new().try_resolve();
+   |                                                   ^^^^^^^^^^^ `Repo` can't be resolved here
+   |
+   = help: the trait `TryResolve<_, Repo>` is not implemented for `&Container<Nil>`
+   = note: `Repo` (or something it depends on) needs `.provide(..)`, or a `TryFromContainer` impl whose dependencies are all resolvable; for an `Arc<dyn Trait>` or `&dyn Trait`, `satisfy::try_dyn_default!`
+   = note: this error names the type you asked for, not the missing dependency; resolve `Repo`'s dependencies one at a time to find it
+help: the trait `TryResolve<Fallible<I>, T>` is conditionally implemented for `&Container<TList>`
+  --> src/container.rs
+   |
+   | / impl<'c, TList, T, I> TryResolve<Fallible<I>, T> for &'c Container<TList>
+   | | where
+   | |     TList: TryWalk<'c, T, I, &'c Container<TList>>,
+   | |____________---------------------------------------^
+   |              |
+   |              unsatisfied requirement introduced here: `Nil: satisfy::strategy::TryWalk<'_, Repo, _, &Container<Nil>>`
+note: required by a bound in `Container::<TList>::try_resolve`
+  --> src/container.rs
+   |
+   |     pub fn try_resolve<'c, T, I>(&'c self) -> Result<T, <&'c Self as TryResolve<I, T>>::Error>
+   |            ----------- required by a bound in this associated function
+   |     where
+   |         &'c Self: TryResolve<I, T>,
+   |                   ^^^^^^^^^^^^^^^^ required by this bound in `Container::<TList>::try_resolve`

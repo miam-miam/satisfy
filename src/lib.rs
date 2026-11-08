@@ -9,7 +9,9 @@ pub mod _compile_errors {}
 pub mod axum;
 mod container;
 mod once_map;
+mod resolve_all;
 mod scope;
+mod shared;
 pub mod strategy;
 pub mod typed_list;
 
@@ -19,8 +21,12 @@ pub use container::Container;
 #[doc(inline)]
 pub use scope::Scoped;
 
-use std::sync::Arc;
-use strategy::{Skip, SkipPath};
+pub use resolve_all::{ResolveAll, TryResolveAll, TryResolveIn};
+#[doc(hidden)]
+pub use shared::{HasShared, Shared, TryShared};
+
+use std::convert::Infallible;
+use strategy::{Fallible, Plain};
 
 /// A default way to build `Self` from a container.
 ///
@@ -101,53 +107,160 @@ use strategy::{Skip, SkipPath};
 #[diagnostic::on_unimplemented(
     message = "`{Self}` has no default (`FromContainer` impl)",
     label = "no default for `{Self}`",
-    note = "`{Self}` needs `.provide(..)` or a `FromContainer` impl; `.override_with(..)` only replaces an existing default"
+    note = "`{Self}` needs `.provide(..)` or a `FromContainer` impl; `.override_with(..)` only replaces an existing default",
+    note = "if `{Self}` has a `TryFromContainer` impl, resolve it with `try_resolve` (`TryResolve`) instead"
 )]
 pub trait FromContainer<I, C>: Sized + 'static {
     /// Builds `Self`, resolving its dependencies from `c`.
     fn from_container(c: C) -> Self;
 }
 
-/// Builds the singleton behind `Arc<Self>` and `&Self`.
+/// A default way to build `Self` from a container that can fail, such as one that reads a file.
 ///
-/// Every type with a [`FromContainer`] impl has this too. Its singleton is built the same way as a
-/// plain `Self`, so [`override_with`](Container::override_with) applies to it as well.
-/// A `dyn Trait` can't be returned by value, so it has no `FromContainer` impl; give it one of
-/// these with [`dyn_default!`].
-#[doc(hidden)]
-#[diagnostic::on_unimplemented(
-    message = "`{Self}` has no shared instance",
-    label = "no shared instance for `{Self}`",
-    note = "give `{Self}` a `FromContainer` impl; for a `dyn Trait`, use `satisfy::dyn_default!(dyn Trait => Impl)`"
-)]
-pub trait Shared<I, C> {
-    /// `Self` with its lifetimes widened to `'static`, which the singleton is stored and keyed as.
-    type Stored: ?Sized + Send + Sync + 'static;
+/// Resolve it with [`try_resolve`](Container::try_resolve), which returns `Result<Self, Error>`.
+/// It is written exactly like [`FromContainer`], with dependencies listed as
+/// [`TryResolve`] or [`TryResolveAll`] bounds.
+///
+/// ```
+/// # use satisfy::{Container, Resolve, TryFromContainer};
+/// # use std::sync::Arc;
+/// #[derive(Clone)]
+/// struct CertPem(&'static str);
+///
+/// #[derive(Debug, PartialEq)]
+/// struct BadCert;
+///
+/// struct TlsCert {
+///     subject: String,
+/// }
+///
+/// impl<I, C> TryFromContainer<I, C> for TlsCert
+/// where
+///     C: Resolve<I, CertPem>,
+/// {
+///     type Error = BadCert;
+///
+///     fn try_from_container(c: C) -> Result<Self, BadCert> {
+///         let pem: CertPem = c.resolve();
+///         let subject = pem.0.strip_prefix("CN=").ok_or(BadCert)?;
+///         Ok(TlsCert { subject: subject.into() })
+///     }
+/// }
+///
+/// let good = Container::new().provide(CertPem("CN=example.org"));
+/// let cert: Arc<TlsCert> = good.try_resolve().unwrap();
+///
+/// assert_eq!(cert.subject, "example.org");
+///
+/// let bad = Container::new().provide(CertPem("garbage"));
+/// let err = bad.try_resolve::<TlsCert, _>().err();
+///
+/// assert_eq!(err, Some(BadCert));
+/// ```
+///
+/// A type with both a `FromContainer` and a `TryFromContainer` impl can't be resolved.
+pub trait TryFromContainer<I, C>: Sized + 'static {
+    /// What building `Self` fails with.
+    type Error;
 
-    fn build_shared(c: C) -> Arc<Self::Stored>;
-
-    // Shorten the lifetime to match the container.
-    fn from_stored(stored: &Arc<Self::Stored>) -> &Arc<Self>;
+    /// Builds `Self`, resolving its dependencies from `c`.
+    fn try_from_container(c: C) -> Result<Self, Self::Error>;
 }
 
-// The `T: FromContainer` bound keeps provided values out, so their `&T` stays a plain borrow
-// and doesn't also match the singleton path.
-#[diagnostic::do_not_recommend]
-impl<T, I, J, C> Shared<(I, J), C> for T
+/// Resolves a type that may have a [`TryFromContainer`] impl.
+///
+/// Anything [`Resolve`] can resolve can be resolved this way too, with `Error = Infallible`, so
+/// generic code with a `C: Resolve<I, T>` bound can call `try_resolve` or hand `C` to code that
+/// needs `TryResolve`. A type built from [`TryFromContainer`] (directly, or shared as `Arc<T>`
+/// or `&T`) has that impl's `Error`.
+///
+/// Generic code only sees the error through its bound, since it depends on how `C` resolves `T`.
+/// To use it as a concrete type, for example with `?`, either name it,
+/// `C: TryResolve<I, T, Error = DbError>`, or require only that it converts into your own error,
+/// `C: TryResolve<I, T>, AppError: From<C::Error>`.
+///
+/// When a dependency is missing, the error names the type you asked for rather than the missing
+/// one; resolve its dependencies one at a time to find it.
+#[diagnostic::on_unimplemented(
+    message = "this container can't try to resolve `{T}`",
+    label = "`{T}` can't be resolved here",
+    note = "`{T}` (or something it depends on) needs `.provide(..)`, or a `TryFromContainer` impl whose dependencies are all resolvable; for an `Arc<dyn Trait>` or `&dyn Trait`, `satisfy::try_dyn_default!`",
+    note = "this error names the type you asked for, not the missing dependency; resolve `{T}`'s dependencies one at a time to find it"
+)]
+pub trait TryResolve<I, T>: sealed::Resolver {
+    /// What resolving `T` fails with.
+    type Error;
+
+    /// Resolves `T`, building it and its dependencies as needed.
+    ///
+    /// ```
+    /// # use satisfy::{Container, Resolve, TryFromContainer, TryResolve};
+    /// #[derive(Clone)]
+    /// struct ShardCount(u32);
+    ///
+    /// #[derive(Debug)]
+    /// struct NoShards;
+    ///
+    /// struct ShardMap {
+    ///     shards: u32,
+    /// }
+    ///
+    /// impl<I, C> TryFromContainer<I, C> for ShardMap
+    /// where
+    ///     C: Resolve<I, ShardCount>,
+    /// {
+    ///     type Error = NoShards;
+    ///
+    ///     fn try_from_container(c: C) -> Result<Self, NoShards> {
+    ///         let count: ShardCount = c.resolve();
+    ///         match count.0 {
+    ///             0 => Err(NoShards),
+    ///             shards => Ok(ShardMap { shards }),
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// fn shards<C, I>(c: C) -> Result<u32, NoShards>
+    /// where
+    ///     C: TryResolve<I, ShardMap, Error = NoShards>,
+    /// {
+    ///     let map = c.try_resolve()?;
+    ///     Ok(map.shards)
+    /// }
+    ///
+    /// assert_eq!(shards(&Container::new().provide(ShardCount(4))).unwrap(), 4);
+    /// assert!(shards(&Container::new().provide(ShardCount(0))).is_err());
+    /// ```
+    fn try_resolve(&self) -> Result<T, Self::Error>;
+}
+
+// Every resolver that can `resolve` a type can `try_resolve` it, including in generic code that
+// only has a `Resolve` bound. Fallible defaults are added per resolver under `Fallible`.
+impl<C, I, T> TryResolve<Plain<I>, T> for C
 where
-    T: FromContainer<J, C> + Send + Sync,
     C: Resolve<I, T>,
 {
-    type Stored = T;
+    type Error = Infallible;
 
-    fn build_shared(c: C) -> Arc<T> {
-        Arc::new(c.resolve())
-    }
-
-    fn from_stored(stored: &Arc<T>) -> &Arc<T> {
-        stored
+    fn try_resolve(&self) -> Result<T, Infallible> {
+        Ok(self.resolve())
     }
 }
+
+/// Overrides that replace a default.
+/// i.e. the type has a [`FromContainer`] or [`TryFromContainer`] impl.
+#[doc(hidden)]
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` has no default this container can build",
+    label = "no default for `{Self}` to replace",
+    note = "`.override_with(..)` only replaces an existing default: `{Self}` needs a `FromContainer` or `TryFromContainer` impl, or use `.provide(..)` instead",
+    note = "if `{Self}` has one, something it depends on can't be resolved here; resolve `{Self}` directly to find what's missing"
+)]
+pub trait HasDefault<I, C> {}
+
+impl<T: FromContainer<I, C>, I, C> HasDefault<Plain<I>, C> for T {}
+
+impl<T: TryFromContainer<I, C>, I, C> HasDefault<Fallible<I>, C> for T {}
 
 /// Main trait for resolving a type from a container.
 ///
@@ -194,104 +307,6 @@ pub trait Resolve<I, T>: sealed::Resolver {
     fn resolve(&self) -> T;
 }
 
-/// Resolves a tuple of 2 to 12 dependencies, using [`Resolve`] for each element.
-///
-/// Written as its own trait rather than a
-/// [`Resolve`] impl so the elements may borrow from the container. For one dependency, use [`Resolve`].
-/// `I` is a tuple of the elements' resolution paths, inferred (see [`strategy`] for more details).
-///
-/// A `C: ResolveAll<I, (A, B)>` bound also implies `C: Resolve<_, A>` and `C: Resolve<_, B>`, so
-/// generic code can hand the elements to code that needs them one at a time with a single `I`.
-/// It also implies `ResolveAll` of any 2 or more of those elements, in any order, so
-/// `ResolveAll<I, (A, B, C, D)>` covers a call needing `ResolveAll<_, (B, D)>`.
-// Also shown when an element is missing, so it can't claim `T` isn't a tuple; `Tuple`'s own
-// message covers that case.
-#[diagnostic::on_unimplemented(
-    message = "this container can't resolve every element of `{T}`",
-    label = "an element of `{T}` can't be resolved here",
-    note = "each element (or something it depends on) needs `.provide(..)`, or a `FromContainer` impl whose dependencies are all resolvable"
-)]
-pub trait ResolveAll<I, T: sealed::Tuple>:
-    Resolve<Self::P1, T::E1>
-    + Resolve<Self::P2, T::E2>
-    + Resolve<Self::P3, T::E3>
-    + Resolve<Self::P4, T::E4>
-    + Resolve<Self::P5, T::E5>
-    + Resolve<Self::P6, T::E6>
-    + Resolve<Self::P7, T::E7>
-    + Resolve<Self::P8, T::E8>
-    + Resolve<Self::P9, T::E9>
-    + Resolve<Self::P10, T::E10>
-    + Resolve<Self::P11, T::E11>
-    + Resolve<Self::P12, T::E12>
-    + Resolve<SkipPath, Skip>
-{
-    #[doc(hidden)]
-    type P1;
-    #[doc(hidden)]
-    type P2;
-    #[doc(hidden)]
-    type P3;
-    #[doc(hidden)]
-    type P4;
-    #[doc(hidden)]
-    type P5;
-    #[doc(hidden)]
-    type P6;
-    #[doc(hidden)]
-    type P7;
-    #[doc(hidden)]
-    type P8;
-    #[doc(hidden)]
-    type P9;
-    #[doc(hidden)]
-    type P10;
-    #[doc(hidden)]
-    type P11;
-    #[doc(hidden)]
-    type P12;
-
-    /// Resolves every element of `T`, building each one and its dependencies as needed.
-    ///
-    /// ```
-    /// # use satisfy::{Container, FromContainer, Resolve, ResolveAll};
-    /// # use std::sync::Arc;
-    /// #[derive(Clone)]
-    /// struct Port(u16);
-    ///
-    /// struct Pool;
-    ///
-    /// impl<C> FromContainer<(), C> for Pool {
-    ///     fn from_container(_: C) -> Self {
-    ///         Pool
-    ///     }
-    /// }
-    ///
-    /// struct Server {
-    ///     port: u16,
-    ///     pool: Arc<Pool>,
-    /// }
-    ///
-    /// impl<I, C> FromContainer<I, C> for Server
-    /// where
-    ///     C: ResolveAll<I, (Port, Arc<Pool>)>,
-    /// {
-    ///     fn from_container(c: C) -> Self {
-    ///         let (port, pool) = c.resolve_all();
-    ///         Server { port: port.0, pool }
-    ///     }
-    /// }
-    ///
-    /// let container = Container::new().provide(Port(8080));
-    /// let server: Server = container.resolve();
-    /// let pool: Arc<Pool> = container.resolve();
-    ///
-    /// assert_eq!(server.port, 8080);
-    /// assert!(Arc::ptr_eq(&server.pool, &pool));
-    /// ```
-    fn resolve_all(&self) -> T;
-}
-
 mod sealed {
     use crate::{Container, Scoped};
 
@@ -301,149 +316,4 @@ mod sealed {
     impl<TList> Resolver for &Container<TList> {}
     impl<Parent, TList> Resolver for Scoped<'_, Parent, TList> {}
     impl<Parent, TList> Resolver for &Scoped<'_, Parent, TList> {}
-
-    #[diagnostic::on_unimplemented(
-        message = "`ResolveAll` takes a tuple of 2 to 12 dependencies, not `{Self}`",
-        label = "not a tuple of 2 to 12 dependencies",
-        note = "to resolve a single dependency, use `Resolve` (`.resolve()`) instead"
-    )]
-    pub trait Tuple {
-        type E1;
-        type E2;
-        type E3;
-        type E4;
-        type E5;
-        type E6;
-        type E7;
-        type E8;
-        type E9;
-        type E10;
-        type E11;
-        type E12;
-    }
-}
-
-// Each impl names the slots it fills (`T I E P`) and the unused slots (`E P`), which resolve
-// `Skip` so that every `ResolveAll` supertrait holds.
-macro_rules! tuple_resolve_all {
-    ($($t:ident $i:ident $e:ident $p:ident),+ $(; $($pe:ident $pp:ident),+)?) => {
-        impl<$($t),+> sealed::Tuple for ($($t,)+) {
-            $(type $e = $t;)+
-            $($(type $pe = Skip;)+)?
-        }
-
-        impl<C, $($t, $i),+> ResolveAll<($($i,)+), ($($t,)+)> for C
-        where
-            $(C: Resolve<$i, $t>,)+
-            C: Resolve<SkipPath, Skip>,
-        {
-            $(type $p = $i;)+
-            $($(type $pp = SkipPath;)+)?
-
-            fn resolve_all(&self) -> ($($t,)+) {
-                ($(<C as Resolve<$i, $t>>::resolve(self),)+)
-            }
-        }
-    };
-}
-
-tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2; E3 P3, E4 P4, E5 P5, E6 P6, E7 P7, E8 P8, E9 P9, E10 P10, E11 P11, E12 P12);
-tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3; E4 P4, E5 P5, E6 P6, E7 P7, E8 P8, E9 P9, E10 P10, E11 P11, E12 P12);
-tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4; E5 P5, E6 P6, E7 P7, E8 P8, E9 P9, E10 P10, E11 P11, E12 P12);
-tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5; E6 P6, E7 P7, E8 P8, E9 P9, E10 P10, E11 P11, E12 P12);
-tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5, T6 I6 E6 P6; E7 P7, E8 P8, E9 P9, E10 P10, E11 P11, E12 P12);
-tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5, T6 I6 E6 P6, T7 I7 E7 P7; E8 P8, E9 P9, E10 P10, E11 P11, E12 P12);
-tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5, T6 I6 E6 P6, T7 I7 E7 P7, T8 I8 E8 P8; E9 P9, E10 P10, E11 P11, E12 P12);
-tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5, T6 I6 E6 P6, T7 I7 E7 P7, T8 I8 E8 P8, T9 I9 E9 P9; E10 P10, E11 P11, E12 P12);
-tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5, T6 I6 E6 P6, T7 I7 E7 P7, T8 I8 E8 P8, T9 I9 E9 P9, T10 I10 E10 P10; E11 P11, E12 P12);
-tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5, T6 I6 E6 P6, T7 I7 E7 P7, T8 I8 E8 P8, T9 I9 E9 P9, T10 I10 E10 P10, T11 I11 E11 P11; E12 P12);
-tuple_resolve_all!(T1 I1 E1 P1, T2 I2 E2 P2, T3 I3 E3 P3, T4 I4 E4 P4, T5 I5 E5 P5, T6 I6 E6 P6, T7 I7 E7 P7, T8 I8 E8 P8, T9 I9 E9 P9, T10 I10 E10 P10, T11 I11 E11 P11, T12 I12 E12 P12);
-
-/// Makes `Arc<dyn Trait>` and `&dyn Trait` resolve to the singleton of `Impl`, built from its
-/// [`FromContainer`] impl.
-///
-/// ```
-/// # use satisfy::{Container, FromContainer};
-/// # use std::sync::Arc;
-/// trait Db: Send + Sync {}
-///
-/// struct Postgres;
-/// impl Db for Postgres {}
-///
-/// impl<C> FromContainer<(), C> for Postgres {
-///     fn from_container(_: C) -> Self {
-///         Postgres
-///     }
-/// }
-///
-/// satisfy::dyn_default!(dyn Db => Postgres);
-///
-/// let c = Container::new();
-/// let db: Arc<dyn Db> = c.resolve();
-/// let borrowed: &dyn Db = c.resolve();
-/// let pg: Arc<Postgres> = c.resolve();
-///
-/// assert!(std::ptr::addr_eq(&*db, borrowed));
-/// assert!(std::ptr::addr_eq(&*db, &*pg));
-/// ```
-///
-/// To swap in another implementation, override the singleton with
-/// [`override_singleton`](Container::override_singleton). An `Arc<dyn Trait>` passed to
-/// [`override_with`](Container::override_with) instead competes with the default, so resolving
-/// `Arc<dyn Trait>` becomes ambiguous.
-///
-/// ```
-/// # use satisfy::{Container, FromContainer};
-/// # use std::sync::Arc;
-/// trait Dice: Send + Sync {
-///     fn roll(&self) -> u8;
-/// }
-///
-/// struct FairDice;
-/// impl Dice for FairDice {
-///     fn roll(&self) -> u8 {
-///         4 // chosen by fair dice roll
-///     }
-/// }
-///
-/// impl<C> FromContainer<(), C> for FairDice {
-///     fn from_container(_: C) -> Self {
-///         FairDice
-///     }
-/// }
-///
-/// satisfy::dyn_default!(dyn Dice => FairDice);
-///
-/// struct LoadedDice(u8);
-/// impl Dice for LoadedDice {
-///     fn roll(&self) -> u8 {
-///         self.0
-///     }
-/// }
-///
-/// let loaded: Arc<dyn Dice> = Arc::new(LoadedDice(6));
-/// let rigged = Container::new().override_singleton(loaded);
-/// let dice: &dyn Dice = rigged.resolve();
-///
-/// assert_eq!(dice.roll(), 6);
-/// ```
-#[macro_export]
-macro_rules! dyn_default {
-    (dyn $trait:path => $impl:ty) => {
-        // For every lifetime, so a `&'c dyn Trait` bound (which means `dyn Trait + 'c`) resolves.
-        impl<'a, I, C> $crate::Shared<I, C> for dyn $trait + 'a
-        where
-            C: $crate::Resolve<I, ::std::sync::Arc<$impl>>,
-        {
-            type Stored = dyn $trait;
-
-            fn build_shared(c: C) -> ::std::sync::Arc<dyn $trait> {
-                <C as $crate::Resolve<I, ::std::sync::Arc<$impl>>>::resolve(&c)
-            }
-
-            fn from_stored(stored: &::std::sync::Arc<dyn $trait>) -> &::std::sync::Arc<Self> {
-                stored
-            }
-        }
-    };
 }

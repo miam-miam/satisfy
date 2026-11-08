@@ -6,16 +6,19 @@ error[E0277]: a provided `Config` can't be resolved by value because it isn't `C
   |
   = help: the trait `strategy::IntoValue<Config>` is not implemented for `&Config`
   = note: resolve `&Config` to borrow it, or derive `Clone`
-help: the trait `Resolve<I, T>` is conditionally implemented for `&Container<TList>`
+help: the following other types implement trait `Resolve<I, T>`
  --> src/container.rs
   |
   | / impl<'c, TList, T, I> Resolve<I, T> for &'c Container<TList>
   | | where
   | |     TList: Locate<'c, T, I, &'c Container<TList>>,
   | |     TList::Out: IntoValue<T>,
-  | |_________________------------^
-  |                   |
-  |                   unsatisfied requirement introduced here: `<Cons<Config, Nil> as strategy::Locate<'_, Config, Here, &Container<Cons<Config, Nil>>>>::Out: strategy::IntoValue<Config>`
+  | |_____________________________^ `&Container<TList>`
+...
+  | / impl<TList, T, I> Resolve<I, T> for Container<TList>
+  | | where
+  | |     for<'c> &'c Container<TList>: Resolve<I, T>,
+  | |________________________________________________^ `Container<TList>`
   = note: required for `&Container<Cons<Config, Nil>>` to implement `Resolve<Here, Config>`
 note: required by a bound in `Container::<TList>::resolve`
  --> src/container.rs

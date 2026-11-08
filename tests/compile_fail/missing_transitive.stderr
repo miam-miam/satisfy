@@ -10,6 +10,7 @@ help: the trait `FromContainer<_, &Container<Nil>>` is not implemented for `Port
  4 | struct Port(#[allow(dead_code)] u16);
    | ^^^^^^^^^^^
    = note: `Port` needs `.provide(..)` or a `FromContainer` impl; `.override_with(..)` only replaces an existing default
+   = note: if `Port` has a `TryFromContainer` impl, resolve it with `try_resolve` (`TryResolve`) instead
 help: the following other types implement trait `FromContainer<I, C>`
   --> tests/compile_fail/missing_transitive.rs:7:1
    |
@@ -18,7 +19,7 @@ help: the following other types implement trait `FromContainer<I, C>`
 ...
 14 | impl<I, C: Resolve<I, Server>> FromContainer<I, C> for App {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `App`
-   = note: required for `Nil` to implement `strategy::Locate<'_, Port, AutoBuild<_>, &Container<Nil>>`
+   = note: required for `Nil` to implement `satisfy::strategy::Locate<'_, Port, AutoBuild<_>, &Container<Nil>>`
    = note: required for `&Container<Nil>` to implement `Resolve<AutoBuild<_>, Port>`
 note: required for `Server` to implement `FromContainer<AutoBuild<_>, &Container<Nil>>`
   --> tests/compile_fail/missing_transitive.rs:7:30

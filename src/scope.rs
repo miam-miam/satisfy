@@ -4,9 +4,15 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::once_map::{TypeKey, sorted_by_name};
-use crate::strategy::{AutoBuild, InParent, IntoValue, Locate, SharedArc, SharedRef};
+use crate::strategy::{
+    AutoBuild, Fallible, InParent, IntoValue, Locate, SameError, SharedArc, SharedRef,
+    TryAutoBuild, TrySharedArc, TrySharedRef, TryWalk,
+};
 use crate::typed_list::{Cons, Nil, ScopeEnd};
-use crate::{Container, FromContainer, Resolve, ResolveAll, Shared};
+use crate::{
+    Container, FromContainer, HasDefault, HasShared, Resolve, ResolveAll, Shared, TryFromContainer,
+    TryResolve, TryResolveAll, TryResolveIn, TryShared,
+};
 
 /// A child of a [`Container`], made with [`Container::scope`], allowing request-based overrides.
 ///
@@ -94,7 +100,7 @@ impl<'p, Parent, TList> Scoped<'p, Parent, TList> {
     #[must_use]
     pub fn override_with<T, I>(mut self, value: T) -> Self
     where
-        T: for<'c> FromContainer<I, &'c Self> + Clone + Send + Sync,
+        T: for<'c> HasDefault<I, &'c Self> + Clone + Send + Sync + 'static,
     {
         // A factory rather than the bare value, so `AutoBuild` doesn't require `T: Clone`.
         let factory: Box<dyn Fn() -> T + Send + Sync> = Box::new(move || value.clone());
@@ -109,7 +115,7 @@ impl<'p, Parent, TList> Scoped<'p, Parent, TList> {
     #[must_use]
     pub fn override_singleton<T, I>(mut self, value: Arc<T>) -> Self
     where
-        T: ?Sized + Shared<I, &'p Container<Parent>, Stored = T> + Send + Sync + 'static,
+        T: ?Sized + HasShared<I, &'p Container<Parent>> + Send + Sync + 'static,
     {
         self.singleton_overrides
             .insert(TypeKey::of::<T>(), Arc::new(value));
@@ -131,29 +137,74 @@ impl<'p, Parent, TList> Scoped<'p, Parent, TList> {
     /// See [`ResolveAll`] for details.
     pub fn resolve_all<'c, T, I>(&'c self) -> T
     where
-        T: crate::sealed::Tuple,
+        T: crate::resolve_all::sealed::Tuple,
         &'c Self: ResolveAll<I, T>,
     {
         <&'c Self as ResolveAll<I, T>>::resolve_all(&self)
+    }
+
+    /// Resolves a single dependency whose default may fail, such as one built from a
+    /// [`TryFromContainer`] impl.
+    ///
+    /// See [`TryResolve`] for details.
+    pub fn try_resolve<'c, T, I>(&'c self) -> Result<T, <&'c Self as TryResolve<I, T>>::Error>
+    where
+        &'c Self: TryResolve<I, T>,
+    {
+        <&'c Self as TryResolve<I, T>>::try_resolve(&self)
+    }
+
+    /// Resolves a tuple of dependencies, whose fallible elements share one error type.
+    ///
+    /// See [`TryResolveAll`] for details.
+    pub fn try_resolve_all<'c, T, I>(
+        &'c self,
+    ) -> Result<T, <&'c Self as TryResolveAll<I, T>>::Error>
+    where
+        T: crate::resolve_all::sealed::Tuple,
+        &'c Self: TryResolveAll<I, T>,
+    {
+        <&'c Self as TryResolveAll<I, T>>::try_resolve_all(&self)
+    }
+
+    // The scope's override wins over the parent's.
+    fn overridden<T: 'static>(&self) -> Option<T> {
+        let Some(f) = self.overrides.get(&TypeKey::of::<T>()) else {
+            return self.parent.overridden();
+        };
+        // Keyed by TypeId::of::<T>() in override_with, so this can't fail.
+        let f = f
+            .downcast_ref::<Box<dyn Fn() -> T + Send + Sync>>()
+            .unwrap();
+        Some(f())
     }
 
     fn build<'c, T, I>(&'c self) -> T
     where
         T: FromContainer<I, &'c Self>,
     {
-        let key = TypeKey::of::<T>();
-        let found = self
-            .overrides
-            .get(&key)
-            .or_else(|| self.parent.override_for(key));
-        if let Some(f) = found {
-            // Keyed by TypeId::of::<T>() in override_with, so this can't fail.
-            let f = f
-                .downcast_ref::<Box<dyn Fn() -> T + Send + Sync>>()
-                .unwrap();
-            return f();
+        self.overridden().unwrap_or_else(|| T::from_container(self))
+    }
+
+    fn try_build<'c, T, I>(&'c self) -> Result<T, T::Error>
+    where
+        T: TryFromContainer<I, &'c Self>,
+    {
+        match self.overridden() {
+            Some(value) => Ok(value),
+            None => T::try_from_container(self),
         }
-        T::from_container(self)
+    }
+
+    fn try_singleton<'c, T, I>(&'c self) -> Result<&'c Arc<T>, T::Error>
+    where
+        T: ?Sized + TryShared<I, &'p Container<Parent>> + 'p,
+    {
+        if let Some(s) = self.singleton_overrides.get(&TypeKey::of::<T::Stored>()) {
+            // Keyed by TypeId::of::<T>() in override_singleton, so this can't fail.
+            return Ok(T::from_stored(s.downcast_ref().unwrap()));
+        }
+        self.parent.try_singleton::<T, I>()
     }
 
     fn singleton<'c, T, I>(&'c self) -> &'c Arc<T>
@@ -197,16 +248,62 @@ where
     }
 }
 
+// Plain resolves are covered for every try resolve by the blanket `Plain` impl.
+impl<'c, 'p, Parent, TList, T, I> TryResolve<Fallible<I>, T> for &'c Scoped<'p, Parent, TList>
+where
+    TList: TryWalk<'c, T, I, &'c Scoped<'p, Parent, TList>>,
+{
+    type Error = TList::Error;
+
+    fn try_resolve(&self) -> Result<T, Self::Error> {
+        let c: &'c Scoped<'p, Parent, TList> = self;
+        c.provided.try_walk(c)
+    }
+}
+
+impl<'c, 'p, Parent, TList, T, I, E> TryResolveIn<Fallible<I>, T, E>
+    for &'c Scoped<'p, Parent, TList>
+where
+    TList: TryWalk<'c, T, I, &'c Scoped<'p, Parent, TList>>,
+    TList::Error: SameError<T, E>,
+{
+    fn try_resolve_in(&self) -> Result<T, E> {
+        let c: &'c Scoped<'p, Parent, TList> = self;
+        c.provided.try_walk(c).map_err(SameError::into_same)
+    }
+}
+
 /// Resolves values that don't borrow from the scope, so generic code can bound
 /// `S: Resolve<I, T>` instead of `for<'c> &'c S: Resolve<I, T>`.
-// Hidden from diagnostics, so errors keep pointing at the `&Scoped` impl's unmet requirement.
-#[diagnostic::do_not_recommend]
 impl<'p, Parent, TList, T, I> Resolve<I, T> for Scoped<'p, Parent, TList>
 where
     for<'c> &'c Scoped<'p, Parent, TList>: Resolve<I, T>,
 {
     fn resolve(&self) -> T {
         <&Scoped<'p, Parent, TList> as Resolve<I, T>>::resolve(&self)
+    }
+}
+
+/// Resolves values that don't borrow from the scope, like the by-value [`Resolve`] impl.
+#[diagnostic::do_not_recommend]
+impl<'p, Parent, TList, T, I, E> TryResolve<Fallible<I>, T> for Scoped<'p, Parent, TList>
+where
+    for<'c> &'c Scoped<'p, Parent, TList>: TryResolve<Fallible<I>, T, Error = E>,
+{
+    type Error = E;
+
+    fn try_resolve(&self) -> Result<T, E> {
+        <&Scoped<'p, Parent, TList> as TryResolve<Fallible<I>, T>>::try_resolve(&self)
+    }
+}
+
+#[diagnostic::do_not_recommend]
+impl<'p, Parent, TList, T, I, E> TryResolveIn<Fallible<I>, T, E> for Scoped<'p, Parent, TList>
+where
+    for<'c> &'c Scoped<'p, Parent, TList>: TryResolveIn<Fallible<I>, T, E>,
+{
+    fn try_resolve_in(&self) -> Result<T, E> {
+        <&Scoped<'p, Parent, TList> as TryResolveIn<Fallible<I>, T, E>>::try_resolve_in(&self)
     }
 }
 
@@ -256,5 +353,54 @@ where
 
     fn locate(&'c self, c: &'c Scoped<'p, Parent, TList>) -> &'c T {
         c.singleton::<T, I>()
+    }
+}
+
+// End of the scope's list, for a default that can fail: continue in the parent's.
+impl<'c, 'p, T, I, Parent, TList> TryWalk<'c, T, InParent<I>, &'c Scoped<'p, Parent, TList>>
+    for ScopeEnd
+where
+    Parent: TryWalk<'c, T, I, &'c Scoped<'p, Parent, TList>>,
+{
+    type Error = Parent::Error;
+
+    fn try_walk(&'c self, c: &'c Scoped<'p, Parent, TList>) -> Result<T, Self::Error> {
+        c.parent.provided().try_walk(c)
+    }
+}
+
+impl<'c, 'p, T, I, Parent, TList> TryWalk<'c, T, TryAutoBuild<I>, &'c Scoped<'p, Parent, TList>>
+    for Nil
+where
+    T: TryFromContainer<I, &'c Scoped<'p, Parent, TList>>,
+{
+    type Error = T::Error;
+
+    fn try_walk(&'c self, c: &'c Scoped<'p, Parent, TList>) -> Result<T, T::Error> {
+        c.try_build::<T, I>()
+    }
+}
+
+impl<'c, 'p, T, I, Parent, TList>
+    TryWalk<'c, Arc<T>, TrySharedArc<I>, &'c Scoped<'p, Parent, TList>> for Nil
+where
+    T: ?Sized + TryShared<I, &'p Container<Parent>> + 'p,
+{
+    type Error = T::Error;
+
+    fn try_walk(&'c self, c: &'c Scoped<'p, Parent, TList>) -> Result<Arc<T>, T::Error> {
+        c.try_singleton::<T, I>().cloned()
+    }
+}
+
+impl<'c, 'p, T, I, Parent, TList> TryWalk<'c, &'c T, TrySharedRef<I>, &'c Scoped<'p, Parent, TList>>
+    for Nil
+where
+    T: ?Sized + TryShared<I, &'p Container<Parent>> + 'p,
+{
+    type Error = T::Error;
+
+    fn try_walk(&'c self, c: &'c Scoped<'p, Parent, TList>) -> Result<&'c T, T::Error> {
+        c.try_singleton::<T, I>().map(|a| &**a)
     }
 }

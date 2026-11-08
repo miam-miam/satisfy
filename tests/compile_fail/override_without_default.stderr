@@ -1,22 +1,23 @@
-error[E0277]: `Port` has no default (`FromContainer` impl)
+error[E0277]: `Port` has no default this container can build
  --> tests/compile_fail/override_without_default.rs:8:44
   |
 8 |     let _ = Container::new().override_with(Port(8080));
-  |                              ------------- ^^^^^^^^^^ no default for `Port`
+  |                              ------------- ^^^^^^^^^^ no default for `Port` to replace
   |                              |
   |                              required by a bound introduced by this call
   |
-help: the trait `for<'c> FromContainer<_, &'c Container<Nil>>` is not implemented for `Port`
+help: the trait `for<'c> satisfy::HasDefault<_, &'c Container<Nil>>` is not implemented for `Port`
  --> tests/compile_fail/override_without_default.rs:5:1
   |
 5 | struct Port(#[allow(dead_code)] u16);
   | ^^^^^^^^^^^
-  = note: `Port` needs `.provide(..)` or a `FromContainer` impl; `.override_with(..)` only replaces an existing default
+  = note: `.override_with(..)` only replaces an existing default: `Port` needs a `FromContainer` or `TryFromContainer` impl, or use `.provide(..)` instead
+  = note: if `Port` has one, something it depends on can't be resolved here; resolve `Port` directly to find what's missing
 note: required by a bound in `Container::<TList>::override_with`
  --> src/container.rs
   |
   |     pub fn override_with<T, I>(mut self, value: T) -> Self
   |            ------------- required by a bound in this associated function
   |     where
-  |         T: for<'c> FromContainer<I, &'c Self> + Clone + Send + Sync,
-  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Container::<TList>::override_with`
+  |         T: for<'c> HasDefault<I, &'c Self> + Clone + Send + Sync + 'static,
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Container::<TList>::override_with`

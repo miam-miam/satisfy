@@ -9,9 +9,12 @@ use std::sync::Arc;
 
 use crate::once_map::{OnceMap, TypeKey, sorted_by_name};
 use crate::scope::Scoped;
-use crate::strategy::{IntoValue, Locate};
+use crate::strategy::{Fallible, IntoValue, Locate, SameError, TryWalk};
 use crate::typed_list::{Cons, Nil, ScopeEnd};
-use crate::{FromContainer, Resolve, ResolveAll, Shared};
+use crate::{
+    FromContainer, HasDefault, HasShared, Resolve, ResolveAll, Shared, TryFromContainer,
+    TryResolve, TryResolveAll, TryResolveIn, TryShared,
+};
 
 /// A dependency injection container whose dependency graph is checked at compile time.
 ///
@@ -298,7 +301,7 @@ impl<TList> Container<TList> {
     #[must_use]
     pub fn override_with<T, I>(mut self, value: T) -> Self
     where
-        T: for<'c> FromContainer<I, &'c Self> + Clone + Send + Sync,
+        T: for<'c> HasDefault<I, &'c Self> + Clone + Send + Sync + 'static,
     {
         // A factory rather than the bare value, so `AutoBuild` doesn't require `T: Clone`.
         let factory: Box<dyn Fn() -> T + Send + Sync> = Box::new(move || value.clone());
@@ -337,7 +340,7 @@ impl<TList> Container<TList> {
     #[must_use]
     pub fn override_singleton<T, I>(mut self, value: Arc<T>) -> Self
     where
-        T: ?Sized + for<'c> Shared<I, &'c Self, Stored = T> + Send + Sync + 'static,
+        T: ?Sized + for<'c> HasShared<I, &'c Self> + Send + Sync + 'static,
     {
         self.singletons.set(TypeKey::of::<T>(), Box::new(value));
         self
@@ -360,7 +363,7 @@ impl<TList> Container<TList> {
     // resolve on the reference type of the container.
     pub fn resolve_all<'c, T, I>(&'c self) -> T
     where
-        T: crate::sealed::Tuple,
+        T: crate::resolve_all::sealed::Tuple,
         &'c Self: ResolveAll<I, T>,
     {
         <&'c Self as ResolveAll<I, T>>::resolve_all(&self)
@@ -426,22 +429,64 @@ impl<TList> Container<TList> {
         &self.provided
     }
 
-    pub(crate) fn override_for(&self, key: TypeKey) -> Option<&Arc<dyn Any + Send + Sync>> {
-        self.overrides.get(&key)
+    /// Resolves a single dependency whose default may fail, such as one built from a
+    /// [`TryFromContainer`] impl. See [`TryResolve`] for details.
+    pub fn try_resolve<'c, T, I>(&'c self) -> Result<T, <&'c Self as TryResolve<I, T>>::Error>
+    where
+        &'c Self: TryResolve<I, T>,
+    {
+        <&'c Self as TryResolve<I, T>>::try_resolve(&self)
+    }
+
+    /// Resolves a tuple of dependencies, whose fallible elements share one error type.
+    /// See [`TryResolveAll`] for details.
+    pub fn try_resolve_all<'c, T, I>(
+        &'c self,
+    ) -> Result<T, <&'c Self as TryResolveAll<I, T>>::Error>
+    where
+        T: crate::resolve_all::sealed::Tuple,
+        &'c Self: TryResolveAll<I, T>,
+    {
+        <&'c Self as TryResolveAll<I, T>>::try_resolve_all(&self)
+    }
+
+    /// The value set by [`override_with`](Self::override_with), if any.
+    pub(crate) fn overridden<T: 'static>(&self) -> Option<T> {
+        let f = self.overrides.get(&TypeKey::of::<T>())?;
+        // Keyed by TypeId::of::<T>() in override_with, so this can't fail.
+        let f = f
+            .downcast_ref::<Box<dyn Fn() -> T + Send + Sync>>()
+            .unwrap();
+        Some(f())
     }
 
     pub(crate) fn build<'c, T, I>(&'c self) -> T
     where
         T: FromContainer<I, &'c Self>,
     {
-        if let Some(f) = self.overrides.get(&TypeKey::of::<T>()) {
-            // Keyed by TypeId::of::<T>() in override_with, so this can't fail.
-            let f = f
-                .downcast_ref::<Box<dyn Fn() -> T + Send + Sync>>()
-                .unwrap();
-            return f();
+        self.overridden().unwrap_or_else(|| T::from_container(self))
+    }
+
+    pub(crate) fn try_build<'c, T, I>(&'c self) -> Result<T, T::Error>
+    where
+        T: TryFromContainer<I, &'c Self>,
+    {
+        match self.overridden() {
+            Some(value) => Ok(value),
+            None => T::try_from_container(self),
         }
-        T::from_container(self)
+    }
+
+    pub(crate) fn try_singleton<'c, T, I>(&'c self) -> Result<&'c Arc<T>, T::Error>
+    where
+        T: ?Sized + TryShared<I, &'c Self> + 'c,
+    {
+        let entry = self
+            .singletons
+            .get_or_try_init(TypeKey::of::<T::Stored>(), || {
+                T::try_build_shared(self).map(|built| Box::new(built) as Box<dyn Any + Send + Sync>)
+            })?;
+        Ok(T::from_stored((**entry).downcast_ref().unwrap()))
     }
 
     pub(crate) fn singleton<'c, T, I>(&'c self) -> &'c Arc<T>
@@ -484,16 +529,61 @@ where
     }
 }
 
+// Plain resolves are covered for every try resolve by the blanket `Plain` impl.
+impl<'c, TList, T, I> TryResolve<Fallible<I>, T> for &'c Container<TList>
+where
+    TList: TryWalk<'c, T, I, &'c Container<TList>>,
+{
+    type Error = TList::Error;
+
+    fn try_resolve(&self) -> Result<T, Self::Error> {
+        let c: &'c Container<TList> = self;
+        c.provided.try_walk(c)
+    }
+}
+
+impl<'c, TList, T, I, E> TryResolveIn<Fallible<I>, T, E> for &'c Container<TList>
+where
+    TList: TryWalk<'c, T, I, &'c Container<TList>>,
+    TList::Error: SameError<T, E>,
+{
+    fn try_resolve_in(&self) -> Result<T, E> {
+        let c: &'c Container<TList> = self;
+        c.provided.try_walk(c).map_err(SameError::into_same)
+    }
+}
+
 /// Resolves values that don't borrow from the container, so code holding it by value (such as
 /// in an `Arc`) can bound `C: Resolve<I, T>` instead of `for<'c> &'c C: Resolve<I, T>`.
-// Hidden from diagnostics, so errors keep pointing at the `&Container` impl's unmet requirement.
-#[diagnostic::do_not_recommend]
 impl<TList, T, I> Resolve<I, T> for Container<TList>
 where
     for<'c> &'c Container<TList>: Resolve<I, T>,
 {
     fn resolve(&self) -> T {
         <&Container<TList> as Resolve<I, T>>::resolve(&self)
+    }
+}
+
+/// Resolves values that don't borrow from the container, like the by-value [`Resolve`] impl.
+#[diagnostic::do_not_recommend]
+impl<TList, T, I, E> TryResolve<Fallible<I>, T> for Container<TList>
+where
+    for<'c> &'c Container<TList>: TryResolve<Fallible<I>, T, Error = E>,
+{
+    type Error = E;
+
+    fn try_resolve(&self) -> Result<T, E> {
+        <&Container<TList> as TryResolve<Fallible<I>, T>>::try_resolve(&self)
+    }
+}
+
+#[diagnostic::do_not_recommend]
+impl<TList, T, I, E> TryResolveIn<Fallible<I>, T, E> for Container<TList>
+where
+    for<'c> &'c Container<TList>: TryResolveIn<Fallible<I>, T, E>,
+{
+    fn try_resolve_in(&self) -> Result<T, E> {
+        <&Container<TList> as TryResolveIn<Fallible<I>, T, E>>::try_resolve_in(&self)
     }
 }
 
