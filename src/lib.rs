@@ -21,6 +21,7 @@ pub use container::Container;
 #[doc(inline)]
 pub use scope::Scoped;
 
+#[doc(inline)]
 pub use resolve_all::{ResolveAll, TryResolveAll, TryResolveIn};
 #[doc(hidden)]
 pub use shared::{HasShared, Shared, TryShared};
