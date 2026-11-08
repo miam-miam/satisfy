@@ -94,8 +94,8 @@ The [compile errors guide] explains the less obvious errors.
 for a `dyn Trait` defaulted with [`dyn_default!`].
 
 To swap one implementation type for another without `dyn`, make the dependent type generic over a trait. The
-[`Container` docs](https://docs.rs/satisfy/latest/satisfy/struct.Container.html#overriding-defaults-in-tests) show
-how, and the trade-off against `dyn_default!`.
+[`Container` docs](https://docs.rs/satisfy/latest/satisfy/struct.Container.html#overriding-defaults-in-tests) show how,
+and the trade-off against `dyn_default!`.
 
 ```rust
 use satisfy::{Container, FromContainer};
@@ -189,6 +189,76 @@ assert!(Arc::ptr_eq(&first.pool, &second.pool));
 
 [`scope`]: https://docs.rs/satisfy/latest/satisfy/struct.Container.html#method.scope
 [`ResolveAll`]: https://docs.rs/satisfy/latest/satisfy/trait.ResolveAll.html
+
+### Fallible [`FromContainer`] Defaults
+
+A type whose construction can fail, can implement [`TryFromContainer`] with an `Error`
+type. Resolve it with [`try_resolve`], or using [`TryResolveAll`]. They work exactly the same as their non-try based
+counterparts. A failed singleton isn't cached, so the next
+`try_resolve` will try building it again.
+
+```rust
+use satisfy::{Container, Resolve, TryFromContainer, TryResolveAll};
+use std::sync::Arc;
+
+#[derive(Clone)]
+struct RulesPath(&'static str);
+
+#[derive(Debug)]
+struct BadRules;
+
+struct SpamFilter {
+    rules: Vec<&'static str>,
+}
+
+// Plain dependencies still use `Resolve`.
+impl<I, C> TryFromContainer<I, C> for SpamFilter
+where
+    C: Resolve<I, RulesPath>,
+{
+    type Error = BadRules;
+
+    fn try_from_container(c: C) -> Result<Self, BadRules> {
+        let path: RulesPath = c.resolve();
+        match path.0 {
+            "" => Err(BadRules),
+            rules => Ok(SpamFilter { rules: rules.split(',').collect() }),
+        }
+    }
+}
+
+struct Inbox {
+    filter: Arc<SpamFilter>,
+}
+
+// A bound on a fallible dependency names its error, so `?` can convert it.
+impl<I, C> TryFromContainer<I, C> for Inbox
+where
+    C: TryResolveAll<I, (Arc<SpamFilter>, RulesPath), Error = BadRules>,
+{
+    type Error = BadRules;
+
+    fn try_from_container(c: C) -> Result<Self, BadRules> {
+        let (filter, _path) = c.try_resolve_all()?;
+        Ok(Inbox { filter })
+    }
+}
+
+fn main() -> Result<(), BadRules> {
+    let container = Container::new().provide(RulesPath("lottery,prince"));
+    let inbox: Inbox = container.try_resolve()?;
+
+    assert_eq!(inbox.filter.rules, ["lottery", "prince"]);
+
+    let broken = Container::new().provide(RulesPath(""));
+    assert!(broken.try_resolve::<Inbox, _>().is_err());
+    Ok(())
+}
+```
+
+[`TryFromContainer`]: https://docs.rs/satisfy/latest/satisfy/trait.TryFromContainer.html
+[`try_resolve`]: https://docs.rs/satisfy/latest/satisfy/struct.Container.html#method.try_resolve
+[`TryResolveAll`]: https://docs.rs/satisfy/latest/satisfy/trait.TryResolveAll.html
 
 #### Licence
 

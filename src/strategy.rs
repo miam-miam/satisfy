@@ -19,6 +19,11 @@
 //! provided value. In a [scope](Container::scope), the scope's own list ends with an
 //! [`InParent`] step into the parent's list, and singletons come from the parent.
 //!
+//! [`try_resolve`](Container::try_resolve) wraps the path in [`Plain`] for any of the above, or
+//! in [`Fallible`] for a type whose default can fail: built from a
+//! [`TryFromContainer`] impl with [`TryAutoBuild`], or shared with
+//! [`TrySharedArc`] or [`TrySharedRef`].
+//!
 //! These markers are inferred and should never be written by hand. They appear in error messages
 //! as the path a resolve took: `There<AutoBuild<()>>` means "skip the one provided value, then
 //! build it".
@@ -27,7 +32,8 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use crate::typed_list::{Cons, Nil};
-use crate::{Container, FromContainer, Shared};
+
+use crate::{Container, FromContainer, Shared, TryFromContainer, TryShared};
 
 /// Continue trying to resolve the requested type from the next type in the stored list.
 pub struct There<I>(PhantomData<I>);
@@ -179,9 +185,11 @@ pub struct SharedRef<I>(PhantomData<I>);
     message = "this container can't resolve `{T}`",
     label = "`{T}` can't be resolved here",
     note = "`{T}` needs `.provide(..)`; a shared `Arc<X>` or `&X` can instead be built from `X`'s `FromContainer` impl if `X: Send + Sync` and `X`'s own dependencies resolve (resolve `X` itself to find a missing one), or for a `dyn Trait`, from `satisfy::dyn_default!(dyn Trait => Impl)`",
-    note = "if `{T}` is provided, check no `FromContainer` impl pins it to a path like `Resolve<(), {T}>`; keep `I` generic"
+    note = "if `{T}` is provided, check no `FromContainer` impl pins it to a path like `Resolve<(), {T}>`; keep `I` generic",
+    note = "if `{T}`'s default can fail (`TryFromContainer` or `try_dyn_default!`), use `try_resolve`"
 )]
-pub(crate) trait Locate<'c, T, I, C> {
+#[doc(hidden)]
+pub trait Locate<'c, T, I, C> {
     type Out;
 
     fn locate(&'c self, c: C) -> Self::Out;
@@ -214,7 +222,9 @@ impl<T: Clone> IntoValue<T> for &T {
     }
 }
 
-// Path 1: the value was provided.
+// Path 1: the value was provided. These leaves have no nested requirements to report, so they're
+// kept out of the impl lists in errors.
+#[diagnostic::do_not_recommend]
 impl<'c, T: 'c, Tail, C> Locate<'c, T, Here, C> for Cons<T, Tail> {
     type Out = &'c T;
 
@@ -223,6 +233,7 @@ impl<'c, T: 'c, Tail, C> Locate<'c, T, Here, C> for Cons<T, Tail> {
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl<'c, T: 'c, Tail, C> Locate<'c, &'c T, HereRef, C> for Cons<T, Tail> {
     type Out = &'c T;
 
@@ -231,6 +242,7 @@ impl<'c, T: 'c, Tail, C> Locate<'c, &'c T, HereRef, C> for Cons<T, Tail> {
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl<'c, T: ?Sized + 'c, Tail, C> Locate<'c, &'c T, HereDeref, C> for Cons<Arc<T>, Tail> {
     type Out = &'c T;
 
@@ -298,5 +310,94 @@ impl<'c, L, C> Locate<'c, Skip, SkipPath, C> for L {
 
     fn locate(&'c self, _: C) -> Skip {
         Skip
+    }
+}
+
+/// A path plain [`resolve`](Container::resolve) can take, which
+/// [`try_resolve`](Container::try_resolve) gives `Error = Infallible`.
+pub struct Plain<I>(PhantomData<I>);
+
+/// A path ending at a default that can fail.
+pub struct Fallible<I>(PhantomData<I>);
+
+/// Built from [`TryFromContainer`], unless overridden.
+pub struct TryAutoBuild<I>(PhantomData<I>);
+
+/// Creates a singleton per container behind an `Arc<T>`, from a default that can fail.
+///
+/// A failed build isn't stored, so the next resolve builds again.
+pub struct TrySharedArc<I>(PhantomData<I>);
+
+/// Creates a singleton per container behind a `&T`, from a default that can fail.
+///
+/// A failed build isn't stored, so the next resolve builds again.
+pub struct TrySharedRef<I>(PhantomData<I>);
+
+/// Walks the list to a default that can fail.
+#[doc(hidden)]
+pub trait TryWalk<'c, T, I, C> {
+    type Error;
+
+    fn try_walk(&'c self, c: C) -> Result<T, Self::Error>;
+}
+
+impl<'c, T, H, Tail, I, C> TryWalk<'c, T, There<I>, C> for Cons<H, Tail>
+where
+    Tail: TryWalk<'c, T, I, C>,
+{
+    type Error = Tail::Error;
+
+    fn try_walk(&'c self, c: C) -> Result<T, Self::Error> {
+        self.tail.try_walk(c)
+    }
+}
+
+impl<'c, T, I, R> TryWalk<'c, T, TryAutoBuild<I>, &'c Container<R>> for Nil
+where
+    T: TryFromContainer<I, &'c Container<R>>,
+{
+    type Error = T::Error;
+
+    fn try_walk(&'c self, c: &'c Container<R>) -> Result<T, T::Error> {
+        c.try_build::<T, I>()
+    }
+}
+
+impl<'c, T, I, R> TryWalk<'c, Arc<T>, TrySharedArc<I>, &'c Container<R>> for Nil
+where
+    T: ?Sized + TryShared<I, &'c Container<R>> + 'c,
+{
+    type Error = T::Error;
+
+    fn try_walk(&'c self, c: &'c Container<R>) -> Result<Arc<T>, T::Error> {
+        c.try_singleton::<T, I>().cloned()
+    }
+}
+
+impl<'c, T, I, R> TryWalk<'c, &'c T, TrySharedRef<I>, &'c Container<R>> for Nil
+where
+    T: ?Sized + TryShared<I, &'c Container<R>> + 'c,
+{
+    type Error = T::Error;
+
+    fn try_walk(&'c self, c: &'c Container<R>) -> Result<&'c T, T::Error> {
+        c.try_singleton::<T, I>().map(|a| &**a)
+    }
+}
+
+/// Holds when `Self`, the error `T` fails with, is the `E` of the `try_resolve_all` tuple `T` is in.
+#[doc(hidden)]
+#[diagnostic::on_unimplemented(
+    message = "`{T}` fails with `{Self}`, not the `{E}` of the rest of this `try_resolve_all` tuple",
+    label = "`{T}` doesn't fail with `{E}`",
+    note = "every fallible element of a `try_resolve_all` tuple must have the same `Error`; resolve `{T}` with a separate `try_resolve`"
+)]
+pub trait SameError<T, E> {
+    fn into_same(self) -> E;
+}
+
+impl<T, E> SameError<T, E> for E {
+    fn into_same(self) -> E {
+        self
     }
 }

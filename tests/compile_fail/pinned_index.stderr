@@ -4,25 +4,17 @@ error[E0277]: this container can't resolve `Port`
 15 |     let _: Server = Container::new().provide(Port(80)).resolve();
    |                                                        ^^^^^^^ `Port` can't be resolved here
    |
-   = help: the trait `strategy::Locate<'_, Port, (), &Container<Cons<Port, Nil>>>` is not implemented for `Cons<Port, Nil>`
+   = help: the trait `satisfy::strategy::Locate<'_, Port, (), &Container<Cons<Port, Nil>>>` is not implemented for `Cons<Port, Nil>`
    = note: `Port` needs `.provide(..)`; a shared `Arc<X>` or `&X` can instead be built from `X`'s `FromContainer` impl if `X: Send + Sync` and `X`'s own dependencies resolve (resolve `X` itself to find a missing one), or for a `dyn Trait`, from `satisfy::dyn_default!(dyn Trait => Impl)`
    = note: if `Port` is provided, check no `FromContainer` impl pins it to a path like `Resolve<(), Port>`; keep `I` generic
-help: the following other types implement trait `strategy::Locate<'c, T, I, C>`
+   = note: if `Port`'s default can fail (`TryFromContainer` or `try_dyn_default!`), use `try_resolve`
+help: the trait `satisfy::strategy::Locate<'_, T, There<I>, C>` is implemented for `Cons<H, Tail>`
   --> src/strategy.rs
    |
-   |   impl<'c, T: 'c, Tail, C> Locate<'c, T, Here, C> for Cons<T, Tail> {
-   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Cons<T, Tail>` implements `strategy::Locate<'_, T, Here, C>`
-...
-   |   impl<'c, T: 'c, Tail, C> Locate<'c, &'c T, HereRef, C> for Cons<T, Tail> {
-   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Cons<T, Tail>` implements `strategy::Locate<'_, &T, HereRef, C>`
-...
-   |   impl<'c, T: ?Sized + 'c, Tail, C> Locate<'c, &'c T, HereDeref, C> for Cons<Arc<T>, Tail> {
-   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Cons<Arc<T>, Tail>` implements `strategy::Locate<'_, &T, HereDeref, C>`
-...
    | / impl<'c, T, H, Tail, I, C> Locate<'c, T, There<I>, C> for Cons<H, Tail>
    | | where
    | |     Tail: Locate<'c, T, I, C>,
-   | |______________________________^ `Cons<H, Tail>` implements `strategy::Locate<'_, T, There<I>, C>`
+   | |______________________________^
    = note: required for `&Container<Cons<Port, Nil>>` to implement `Resolve<(), Port>`
 note: required for `Server` to implement `FromContainer<(), &Container<Cons<Port, Nil>>>`
   --> tests/compile_fail/pinned_index.rs:8:28
@@ -31,7 +23,7 @@ note: required for `Server` to implement `FromContainer<(), &Container<Cons<Port
    |         -----------------  ^^^^^^^^^^^^^^^^^^^^     ^^^^^^
    |         |
    |         unsatisfied trait bound introduced here
-   = note: required for `Nil` to implement `strategy::Locate<'_, Server, AutoBuild<()>, &Container<Cons<Port, Nil>>>`
+   = note: required for `Nil` to implement `satisfy::strategy::Locate<'_, Server, AutoBuild<()>, &Container<Cons<Port, Nil>>>`
    = note: 1 redundant requirement hidden
    = note: required for `&Container<Cons<Port, Nil>>` to implement `Resolve<There<AutoBuild<()>>, Server>`
 note: required by a bound in `Container::<TList>::resolve`

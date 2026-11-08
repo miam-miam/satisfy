@@ -23,8 +23,8 @@ This can be caused by:
 This appears for shared instances (singletons). Check the following in order:
 
 1. `X` has a `FromContainer` impl, or was provided.
-2. Every dependency of `X` can be resolved. The error stops at `Arc<X>` instead of naming the missing dependency, so
-   add a temporary `let _: X = container.resolve();`: its error names the type that's missing.
+2. Every dependency of `X` can be resolved. The error stops at `Arc<X>` instead of naming the missing dependency, so add
+   a temporary `let _: X = container.resolve();`: its error names the type that's missing.
 3. `X` is `Send + Sync`. Singletons are shared across threads, so a type holding an `Rc` or `Cell`
    can't be one.
 4. For `Arc<dyn Trait>`, the trait has a `satisfy::dyn_default!(dyn Trait => Impl)`.
@@ -57,11 +57,15 @@ Resolving `App` can fail with "`Port` has no default". The error names the type 
 missing, not the one you asked for. The `required for ...` notes underneath trace the path from `App` down to `Port`.
 The trace stops early at a shared `Arc<X>` or `&X`; see [above](#this-container-cant-resolve-arcx-or-x).
 
-## `has no default` from `override_with`
+## `has no default this container can build` from `override_with`
 
-`override_with` only replaces an existing default. To supply a value for a type without one, use
-`provide`. To swap the implementation behind `Arc<dyn Trait>`, use
+`override_with` only replaces an existing default, from a `FromContainer` or `TryFromContainer` impl. To supply a value
+for a type without one, use `provide`. To swap the implementation behind `Arc<dyn Trait>`, use
 `override_singleton::<dyn Trait, _>(..)`; `override_with` doesn't accept an `Arc<dyn Trait>`.
+
+The same message appears when the type does have a default but something it depends on can't be resolved, and
+`has no shared instance this container can build` is its `override_singleton` counterpart. Resolve the type directly to
+find the missing dependency.
 
 ## Paths in error messages
 
@@ -99,3 +103,63 @@ where
 
 config(&container); // `C` is `&Container<..>`
 ```
+
+## Fallible defaults (`try_resolve`)
+
+### `has no default` for a type with a `TryFromContainer` impl
+
+A type whose default can fail can't be built by `resolve`; use `try_resolve` (or `try_resolve_all`), which returns its
+`Error`.
+
+For `Arc<X>` or `&X` of such a type, or a `dyn Trait`, `resolve` reports
+`this container can't resolve Arc<X>` instead, with a note to use `try_resolve`.
+
+### `this container can't try to resolve X`
+
+`try_resolve` reports the type you asked for, not the missing dependency underneath it. Resolve that type's dependencies
+one at a time to find the one that's missing.
+
+A `TryFromContainer` impl can also cause it by sharing one path `I` between two bounds:
+
+```rust,ignore
+impl<I, C> TryFromContainer<I, C> for Orders
+where
+    C: TryResolve<I, Db, Error = DbError> + TryResolve<I, Cache, Error = CacheError>,
+{ ... }
+```
+
+Each dependency needs its own path. Put dependencies with the same error in one `TryResolveAll` bound, and give the rest
+a path each:
+
+```rust,ignore
+impl<I1, I2, C> TryFromContainer<(I1, I2), C> for Orders
+where
+    C: TryResolve<I1, Db, Error = DbError> + TryResolve<I2, Cache, Error = CacheError>,
+{ ... }
+```
+
+### `X fails with E1, not the E2 of the rest of this try_resolve_all tuple`
+
+Every fallible element of a `try_resolve_all` tuple must have the same `Error`. Plain elements fit any error. Resolve an
+element with a different error with its own `try_resolve`.
+
+### `type annotations needed` from `try_resolve` or
+`try_resolve_all` ([E0282](https://doc.rust-lang.org/error_codes/E0282.html), [E0284](https://doc.rust-lang.org/error_codes/E0284.html))
+
+As with E0283 [above](#type-annotations-needed-e0283), ignore the suggestion to write the path out by hand.
+
+- E0282 from `try_resolve_all`: the tuple has no fallible element, so there is no error type to infer. Use
+  `resolve_all` instead.
+- E0284, `cannot satisfy <.. as TryResolve<_, X>>::Error == ..`, listing a `Fallible` and a `Plain` impl: `X` is both
+  provided and has a `TryFromContainer` impl, or has both a `FromContainer` and a `TryFromContainer` impl. Remove one.
+  Plain `resolve` doesn't see the `TryFromContainer` impl, so it takes a provided value without complaint.
+
+### `` `?` couldn't convert the error `` with `From<Infallible>`
+
+`try_resolve` of a plain type returns `Result<T, Infallible>`, which `?` can't convert into your error. Use `resolve`
+for plain dependencies, and a `Resolve` bound in a `TryFromContainer` impl.
+
+### `overflow evaluating the requirement` ([E0275](https://doc.rust-lang.org/error_codes/E0275.html))
+
+A `TryFromContainer` impl's bound named its own error, as in `C: TryResolve<I, Db, Error = Self::Error>` or
+`Self::Error: From<C::Error>`. Name the concrete type instead: `Error = DbError`, or `AppError: From<C::Error>`.

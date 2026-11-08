@@ -1,0 +1,36 @@
+error[E0277]: `Db` has no default (`FromContainer` impl)
+  --> tests/compile_fail/resolve_fallible.rs:16:34
+   |
+16 |     let _: Db = Container::new().resolve();
+   |                                  ^^^^^^^ no default for `Db`
+   |
+help: the trait `FromContainer<_, &Container<Nil>>` is not implemented for `Db`
+  --> tests/compile_fail/resolve_fallible.rs:6:1
+   |
+ 6 | struct Db;
+   | ^^^^^^^^^
+   = note: `Db` needs `.provide(..)` or a `FromContainer` impl; `.override_with(..)` only replaces an existing default
+   = note: if `Db` has a `TryFromContainer` impl, resolve it with `try_resolve` (`TryResolve`) instead
+help: the following other types implement trait `Resolve<I, T>`
+  --> src/container.rs
+   |
+   | / impl<'c, TList, T, I> Resolve<I, T> for &'c Container<TList>
+   | | where
+   | |     TList: Locate<'c, T, I, &'c Container<TList>>,
+   | |     TList::Out: IntoValue<T>,
+   | |_____________________________^ `&Container<TList>`
+...
+   | / impl<TList, T, I> Resolve<I, T> for Container<TList>
+   | | where
+   | |     for<'c> &'c Container<TList>: Resolve<I, T>,
+   | |________________________________________________^ `Container<TList>`
+   = note: required for `Nil` to implement `satisfy::strategy::Locate<'_, Db, AutoBuild<_>, &Container<Nil>>`
+   = note: required for `&Container<Nil>` to implement `Resolve<AutoBuild<_>, Db>`
+note: required by a bound in `Container::<TList>::resolve`
+  --> src/container.rs
+   |
+   |     pub fn resolve<'c, T, I>(&'c self) -> T
+   |            ------- required by a bound in this associated function
+   |     where
+   |         &'c Self: Resolve<I, T>,
+   |                   ^^^^^^^^^^^^^ required by this bound in `Container::<TList>::resolve`
