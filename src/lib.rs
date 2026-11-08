@@ -161,7 +161,7 @@ pub trait FromContainer<I, C>: Sized + 'static {
 /// A type with both a `FromContainer` and a `TryFromContainer` impl can't be resolved.
 pub trait TryFromContainer<I, C>: Sized + 'static {
     /// What building `Self` fails with.
-    type Error;
+    type Error: 'static;
 
     /// Builds `Self`, resolving its dependencies from `c`.
     fn try_from_container(c: C) -> Result<Self, Self::Error>;

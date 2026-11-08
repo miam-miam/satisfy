@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 #[derive(Clone)]
 struct DbUrl(&'static str);
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 struct DbDown;
 
 #[derive(Clone)]
@@ -337,4 +337,69 @@ fn scope_mixes_its_own_values_with_parent_fallible_singletons() {
     assert!(std::ptr::eq(borrowed, &*parent_db));
 
     assert_eq!(tenant_and_db(&scope), Ok("acme"));
+}
+
+#[test]
+fn error_override_fails_a_working_default_and_its_dependents() {
+    let c = Container::new()
+        .provide(DbUrl("pg://up"))
+        .override_with_error::<Db, _, _>(DbDown);
+
+    assert_eq!(c.try_resolve::<Db, _>().err(), Some(DbDown));
+    assert_eq!(c.try_resolve::<&Db, _>().err(), Some(DbDown));
+    assert_eq!(
+        c.try_resolve::<Orders, _>().err(),
+        Some(AppError::Db(DbDown))
+    );
+}
+
+#[test]
+fn last_override_of_a_type_wins() {
+    let failing = Container::new()
+        .provide(DbUrl("pg://up"))
+        .override_with(Db { url: "pg://fake" })
+        .override_with_error::<Db, _, _>(DbDown);
+    assert_eq!(failing.try_resolve::<Db, _>().err(), Some(DbDown));
+
+    let working = Container::new()
+        .provide(DbUrl(""))
+        .override_with_error::<Db, _, _>(DbDown)
+        .override_with(Db { url: "pg://fake" });
+    assert_eq!(working.try_resolve::<Db, _>().unwrap().url, "pg://fake");
+}
+
+#[test]
+fn scope_error_override_beats_the_parents_value_but_not_its_singleton() {
+    let app = Container::new()
+        .provide(DbUrl(""))
+        .override_with(Db { url: "pg://parent" });
+    let scope = app.scope().override_with_error::<Db, _, _>(DbDown);
+
+    assert_eq!(scope.try_resolve::<Db, _>().err(), Some(DbDown));
+    let shared: Arc<Db> = scope.try_resolve().unwrap();
+    assert_eq!(shared.url, "pg://parent");
+}
+
+#[test]
+fn singleton_override_beats_an_error_override() {
+    let fake = Arc::new(Db { url: "pg://fake" });
+    let c = Container::new()
+        .provide(DbUrl("pg://up"))
+        .override_with_error::<Db, _, _>(DbDown)
+        .override_singleton(fake.clone());
+
+    let db: &Db = c.try_resolve().unwrap();
+    assert!(std::ptr::eq(db, &*fake));
+    assert_eq!(c.try_resolve::<Db, _>().err(), Some(DbDown));
+}
+
+#[test]
+fn scope_value_override_beats_the_parents_error() {
+    let app = Container::new()
+        .provide(DbUrl("pg://up"))
+        .override_with_error::<Db, _, _>(DbDown);
+    let scope = app.scope().override_with(Db { url: "pg://scope" });
+
+    assert_eq!(scope.try_resolve::<Db, _>().unwrap().url, "pg://scope");
+    assert_eq!(app.scope().try_resolve::<Db, _>().err(), Some(DbDown));
 }

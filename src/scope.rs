@@ -3,6 +3,9 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
+use crate::container::{
+    insert_error_override, insert_value_override, run_override, run_value_override,
+};
 use crate::once_map::{TypeKey, sorted_by_name};
 use crate::strategy::{
     AutoBuild, Fallible, InParent, IntoValue, Locate, SameError, SharedArc, SharedRef,
@@ -102,9 +105,22 @@ impl<'p, Parent, TList> Scoped<'p, Parent, TList> {
     where
         T: for<'c> HasDefault<I, &'c Self> + Clone + Send + Sync + 'static,
     {
-        // A factory rather than the bare value, so `AutoBuild` doesn't require `T: Clone`.
-        let factory: Box<dyn Fn() -> T + Send + Sync> = Box::new(move || value.clone());
-        self.overrides.insert(TypeKey::of::<T>(), Arc::new(factory));
+        insert_value_override(&mut self.overrides, value);
+        self
+    }
+
+    /// Makes [`try_resolve`](Self::try_resolve) of a type with a [`TryFromContainer`] impl fail
+    /// with a clone of the provided `error`.
+    ///
+    /// Like [`override_with`](Self::override_with), it takes precedence over the parent's
+    /// override and leaves singletons unaffected.
+    #[must_use]
+    pub fn override_with_error<T, E, I>(mut self, error: E) -> Self
+    where
+        T: for<'c> TryFromContainer<I, &'c Self, Error = E>,
+        E: Clone + Send + Sync + 'static,
+    {
+        insert_error_override::<T, E>(&mut self.overrides, error);
         self
     }
 
@@ -169,14 +185,17 @@ impl<'p, Parent, TList> Scoped<'p, Parent, TList> {
 
     // The scope's override wins over the parent's.
     fn overridden<T: 'static>(&self) -> Option<T> {
-        let Some(f) = self.overrides.get(&TypeKey::of::<T>()) else {
-            return self.parent.overridden();
-        };
-        // Keyed by TypeId::of::<T>() in override_with, so this can't fail.
-        let f = f
-            .downcast_ref::<Box<dyn Fn() -> T + Send + Sync>>()
-            .unwrap();
-        Some(f())
+        match self.overrides.get(&TypeKey::of::<T>()) {
+            Some(f) => run_value_override(f),
+            None => self.parent.overridden(),
+        }
+    }
+
+    fn try_overridden<T: 'static, E: 'static>(&self) -> Option<Result<T, E>> {
+        match self.overrides.get(&TypeKey::of::<T>()) {
+            Some(f) => Some(run_override(f)),
+            None => self.parent.try_overridden(),
+        }
     }
 
     fn build<'c, T, I>(&'c self) -> T
@@ -190,10 +209,8 @@ impl<'p, Parent, TList> Scoped<'p, Parent, TList> {
     where
         T: TryFromContainer<I, &'c Self>,
     {
-        match self.overridden() {
-            Some(value) => Ok(value),
-            None => T::try_from_container(self),
-        }
+        self.try_overridden()
+            .unwrap_or_else(|| T::try_from_container(self))
     }
 
     fn try_singleton<'c, T, I>(&'c self) -> Result<&'c Arc<T>, T::Error>

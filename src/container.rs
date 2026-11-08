@@ -303,9 +303,45 @@ impl<TList> Container<TList> {
     where
         T: for<'c> HasDefault<I, &'c Self> + Clone + Send + Sync + 'static,
     {
-        // A factory rather than the bare value, so `AutoBuild` doesn't require `T: Clone`.
-        let factory: Box<dyn Fn() -> T + Send + Sync> = Box::new(move || value.clone());
-        self.overrides.insert(TypeKey::of::<T>(), Arc::new(factory));
+        insert_value_override(&mut self.overrides, value);
+        self
+    }
+
+    /// Makes [`try_resolve`](Self::try_resolve) of a type with a [`TryFromContainer`] impl fail
+    /// with a clone of the provided `error`.
+    ///
+    /// Like [`override_with`](Self::override_with), it replaces the default for the singleton
+    /// behind `Arc<T>` and `&T` too, unless [`override_singleton`](Self::override_singleton)
+    /// sets it. The last override of a type wins.
+    ///
+    /// ```
+    /// # use satisfy::{Container, TryFromContainer};
+    /// # use std::sync::Arc;
+    /// #[derive(Clone, Debug, PartialEq)]
+    /// struct QuotaExceeded;
+    ///
+    /// struct UploadSlot;
+    ///
+    /// impl<C> TryFromContainer<(), C> for UploadSlot {
+    ///     type Error = QuotaExceeded;
+    ///
+    ///     fn try_from_container(_: C) -> Result<Self, QuotaExceeded> {
+    ///         Ok(UploadSlot)
+    ///     }
+    /// }
+    ///
+    /// let full = Container::new().override_with_error::<UploadSlot, _, _>(QuotaExceeded);
+    ///
+    /// assert_eq!(full.try_resolve::<UploadSlot, _>().err(), Some(QuotaExceeded));
+    /// assert_eq!(full.try_resolve::<Arc<UploadSlot>, _>().err(), Some(QuotaExceeded));
+    /// ```
+    #[must_use]
+    pub fn override_with_error<T, E, I>(mut self, error: E) -> Self
+    where
+        T: for<'c> TryFromContainer<I, &'c Self, Error = E>,
+        E: Clone + Send + Sync + 'static,
+    {
+        insert_error_override::<T, E>(&mut self.overrides, error);
         self
     }
 
@@ -452,12 +488,13 @@ impl<TList> Container<TList> {
 
     /// The value set by [`override_with`](Self::override_with), if any.
     pub(crate) fn overridden<T: 'static>(&self) -> Option<T> {
-        let f = self.overrides.get(&TypeKey::of::<T>())?;
-        // Keyed by TypeId::of::<T>() in override_with, so this can't fail.
-        let f = f
-            .downcast_ref::<Box<dyn Fn() -> T + Send + Sync>>()
-            .unwrap();
-        Some(f())
+        run_value_override(self.overrides.get(&TypeKey::of::<T>())?)
+    }
+
+    /// The value or error set by [`override_with`](Self::override_with) or
+    /// [`override_with_error`](Self::override_with_error), if any.
+    pub(crate) fn try_overridden<T: 'static, E: 'static>(&self) -> Option<Result<T, E>> {
+        Some(run_override(self.overrides.get(&TypeKey::of::<T>())?))
     }
 
     pub(crate) fn build<'c, T, I>(&'c self) -> T
@@ -471,10 +508,8 @@ impl<TList> Container<TList> {
     where
         T: TryFromContainer<I, &'c Self>,
     {
-        match self.overridden() {
-            Some(value) => Ok(value),
-            None => T::try_from_container(self),
-        }
+        self.try_overridden()
+            .unwrap_or_else(|| T::try_from_container(self))
     }
 
     pub(crate) fn try_singleton<'c, T, I>(&'c self) -> Result<&'c Arc<T>, T::Error>
@@ -497,6 +532,50 @@ impl<TList> Container<TList> {
             Box::new(T::build_shared(self))
         });
         T::from_stored((**entry).downcast_ref().unwrap())
+    }
+}
+
+type ValueOverride<T> = Box<dyn Fn() -> T + Send + Sync>;
+
+// Returns a `Result` rather than `E` so it can't be mistaken for a `ValueOverride` when `E == T`.
+type ErrorOverride<T, E> = Box<dyn Fn() -> Result<T, E> + Send + Sync>;
+
+pub(crate) fn insert_value_override<T: Clone + Send + Sync + 'static>(
+    overrides: &mut HashMap<TypeKey, Arc<dyn Any + Send + Sync>>,
+    value: T,
+) {
+    // A factory rather than the bare value, so `AutoBuild` doesn't require `T: Clone`.
+    let factory: ValueOverride<T> = Box::new(move || value.clone());
+    overrides.insert(TypeKey::of::<T>(), Arc::new(factory));
+}
+
+pub(crate) fn insert_error_override<T: 'static, E: Clone + Send + Sync + 'static>(
+    overrides: &mut HashMap<TypeKey, Arc<dyn Any + Send + Sync>>,
+    error: E,
+) {
+    let make: ErrorOverride<T, E> = Box::new(move || Err(error.clone()));
+    overrides.insert(TypeKey::of::<T>(), Arc::new(make));
+}
+
+// `None` for an error override.
+pub(crate) fn run_value_override<T: 'static>(f: &Arc<dyn Any + Send + Sync>) -> Option<T> {
+    f.downcast_ref::<ValueOverride<T>>().map(|f| f())
+}
+
+// `f` is keyed by `T`, its error is stored as `T::Error` when `override_with_error`
+// was called so should always hold `Ok(_)`.
+//
+// Technically the type of T::Error could have changed if it's implemented based on the type
+// of the container.
+// e.g. implementing TryFromContainer for Container<Nil> and Container<Cons<Nil>> with two
+// different error types. Which would be insane for any user code to do.
+pub(crate) fn run_override<T: 'static, E: 'static>(f: &Arc<dyn Any + Send + Sync>) -> Result<T, E> {
+    match run_value_override(f) {
+        Some(value) => Ok(value),
+        None => f.downcast_ref::<ErrorOverride<T, E>>().expect(
+            "the error given to `override_with_error` isn't this container's `TryFromContainer::Error`; \
+             ensure you implement TryFromContainer for all containers using the same error type.",
+        )(),
     }
 }
 
